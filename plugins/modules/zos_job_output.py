@@ -385,6 +385,7 @@ def run_module():
     job_name = module.params.get("job_name")
     owner = module.params.get("owner")
     ddname = module.params.get("ddname")
+    dummy_var = None
 
     if not job_id and not job_name and not owner:
         module.fail_json(msg="Please provide a job_id or job_name or owner")
