@@ -166,6 +166,75 @@ expanded_exclude_paths:
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils import (
     better_arg_parser)
+from ansible.module_utils.common.text.converters import to_bytes
+
+
+STATE_ABSENT = 'absent'
+STATE_ARCHIVED = 'archive'
+STATE_COMPRESSED = 'compress'
+STATE_INCOMPLETE = 'incomplete'
+
+def _to_bytes(s):
+    return to_bytes(s, errors='surrogate_or_strict')
+
+
+def get_archive(module):
+    """
+    Return the proper archive handler based on archive format.
+    Arguments:
+        format: {str}
+    Returns:
+        Archive: {Archive}
+
+
+    """
+
+    """
+    TODO Come up with rules to decide based on src, dest and format
+    which archive handler to use.
+    """
+
+    return Archive(module)
+
+
+def expand_paths(paths):
+    expanded_path = []
+    is_globby = False
+    for path in paths:
+        b_path = _to_bytes(path)
+        if b'*' in b_path or b'?' in b_path:
+            e_paths = glob.glob(b_path)
+            is_globby = True
+        else:
+            e_paths = [b_path]
+        expanded_path.extend(e_paths)
+    return expanded_path, is_globby
+
+
+
+class Archive(object):
+    def __init__(self, module):
+        self.module = module
+        self.dest = module.params['dest']
+        self.exclusion_patterns = module.params['exclusion_patterns'] or []
+        self.format = module.params['format']
+        self.must_archive = module.params['force_archive']
+        self.remove = module.params['remove']
+
+        self.changed = False
+        self.destination_state = STATE_ABSENT
+        self.errors = []
+        self.file = None
+        self.successes = []
+        self.targets = []
+        self.not_found = []
+
+        paths = module.params['path']
+
+        self.expanded_paths, has_globs = expand_paths(paths)
+        self.expanded_exclude_paths = expand_paths(module.params['exclude_path'])[0]
+
+        self.paths = sorted(set(self.expanded_paths) - set(self.expanded_exclude_paths))
 
 
 def run_module():
@@ -222,6 +291,7 @@ def run_module():
     except ValueError as err:
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
 
+    archive = get_archive(module)
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
     # state with no modifications
