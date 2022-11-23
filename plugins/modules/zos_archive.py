@@ -175,6 +175,7 @@ STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
 STATE_INCOMPLETE = 'incomplete'
 
+
 def _to_bytes(s):
     return to_bytes(s, errors='surrogate_or_strict')
 
@@ -241,7 +242,7 @@ class Archive(object):
         self.expanded_exclude_paths = expand_paths(module.params['exclude_path'])[0]
 
         self.paths = sorted(set(self.expanded_paths) - set(self.expanded_exclude_paths))
-        
+
         if not self.paths:
             module.fail_json(
                 path=', '.join(paths),
@@ -311,12 +312,10 @@ def run_module():
     # Find the targets
     archive.find_targets()
     # If archive has targets:
-    #       
     # Else:
     #   if destination exists:
-    #
     if archive.has_targets():
-
+        None
 
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
