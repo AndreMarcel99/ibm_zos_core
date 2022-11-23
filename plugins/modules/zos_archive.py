@@ -169,6 +169,8 @@ from ansible_collections.ibm.ibm_zos_core.plugins.module_utils import (
 from ansible.module_utils.common.text.converters import to_bytes
 import glob
 import re
+import os
+import abc
 
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
@@ -198,11 +200,12 @@ def get_archive(module):
 
     return Archive(module)
 
+def common_path(paths):
+    empty = b'' if paths and isinstance(paths[0], six.binary_type) else ''
 
-# TODO this is only acceptable for USS files,
-# maybe use the function inside the class ?
-def is_archive(path):
-    return re.search(br'\.(tar|tar\.(gz|bz2|xz)|tgz|tbz2|zip)$', os.path.basename(path), re.IGNORECASE)
+    return os.path.join(
+        os.path.dirname(os.path.commonprefix([os.path.join(os.path.dirname(p), empty) for p in paths])), empty
+    )
 
 
 def expand_paths(paths):
@@ -219,7 +222,11 @@ def expand_paths(paths):
     return expanded_path, is_globby
 
 
-class Archive(object):
+def strip_prefix(prefix, string):
+    return string[len(prefix):] if string.startswith(prefix) else string
+
+
+class Archive(abc.ABCMeta):
     def __init__(self, module):
         self.module = module
         self.dest = module.params['dest']
@@ -250,6 +257,117 @@ class Archive(object):
                 # expanded_exclude_paths=_to_native(b', '.join(self.expanded_exclude_paths)),
                 msg='Error, no source paths were found'
             )
+
+        self.root = common_path(self.paths)
+
+
+    def add(self, path, archive_name):
+        try:
+            self._add(path, archive_name)
+            if self.contains(archive_name):
+                self.successes.append(path)
+        except Exception as e:
+            self.errors.append('%s: %s' % (path, e))
+
+
+    def add_targets(self):
+        """
+        
+        """
+        self.open()
+
+        try:
+            for target in self.targets:
+                if os.path.isdir(target):
+                    for directory_path, directory_names, file_names in os.walk(target, topdown=True):
+                        for directory_name in directory_names:
+                            full_path = os.path.join(directory_path, directory_name)
+                            self.add(full_path, strip_prefix(self.root, full_path))
+
+                        for file_name in file_names:
+                            full_path = os.path.join(directory_path, file_name)
+                            self.add(full_path, strip_prefix(self.root, full_path))
+                else:
+                    self.add(target, strip_prefix(self.root, target))
+        except Exception as e:
+            if self.format in ('zip', 'tar'):
+                archive_format = self.format
+            else:
+                archive_format = 'tar.' + self.format
+            self.module.fail_json(
+                msg='Error when writing %s archive at %s: %s' % (
+                    archive_format, _to_native(self.destination), _to_native(e)
+                ),
+                exception=format_exc()
+            )
+        self.close()
+
+        if self.errors:
+            self.module.fail_json(
+                msg='Errors when writing archive at %s: %s' % (_to_native(self.destination), '; '.join(self.errors))
+            )
+
+    def find_targets(self):
+        """
+        Find USS targets, this is the default behaviour, MVS handlers will override it.
+        """
+        for path in self.paths:
+            if not os.path.lexists(path):
+                self.not_found.append(path)
+            else:
+                self.targets.append(path)
+
+
+    def is_archive(path):
+        return re.search(br'\.(tar|tar\.(gz|bz2|xz)|tgz|tbz2|zip)$', os.path.basename(path), re.IGNORECASE)
+
+
+    def has_targets(self)
+        return bool(self.targets)
+
+
+    @abc.abstractmethod
+    def close(self):
+        pass
+
+
+    @abc.abstractmethod
+    def contains(self, name):
+        pass
+
+
+    @abc.abstractmethod
+    def open(self):
+        pass
+
+
+    @abc.abstractmethod
+    def _add(self, path, archive_name):
+        pass
+
+
+    @abc.abstractmethod
+    def _get_checksums(self, path):
+        pass
+
+
+    @abc.abstractmethod
+    def _list_targets(self):
+        pass
+
+
+    @property
+    def result(self):
+        return {
+            'archived': [p for p in self.successes],
+            'dest': self.destination,
+            'dest_state': self.destination_state,
+            'changed': self.changed,
+            'arcroot': self.root,
+            'missing': [p for p in self.not_found],
+            'expanded_paths': [p for p in self.expanded_paths],
+            'expanded_exclude_paths': [p for p in self.expanded_exclude_paths],
+        }
 
 
 def run_module():
@@ -303,6 +421,7 @@ def run_module():
     try:
         parser = better_arg_parser.BetterArgParser(arg_defs)
         parsed_args = parser.parse_args(module.params)
+        # TODO Is is ok to override module.params with parsed_args ? 
         module.params = parsed_args
     except ValueError as err:
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
@@ -311,18 +430,26 @@ def run_module():
     archive = get_archive(module)
     # Find the targets
     archive.find_targets()
-    # If archive has targets:
-    # Else:
-    #   if destination exists:
     if archive.has_targets():
-        None
+        if archive.must_archive:
+            archive.add_targets()
+            archive.destination_state = STATE_INCOMPLETE if archive.has_unfound_targets() else STATE_ARCHIVED
+            archive.changed = archive.is_different_from_original()
+            if archive.remove:
+                archive.remove_targets()
+    else:
+        if archive.destination_exists():
+            # If destination exists then we verify is an archive.
+            archive.destination_state = STATE_ARCHIVED if archive.is_archive(archive.destination) else STATE_COMPRESSED
 
+    if archive.destination_exists():
+        archive.update_permissions()
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
     # state with no modifications
     if module.check_mode:
         module.exit_json(**result)
-    module.exit_json(**result)
+    module.exit_json(**archive.result)
 
 
 def main():
