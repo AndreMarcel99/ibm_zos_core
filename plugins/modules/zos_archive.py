@@ -167,7 +167,8 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils import (
     better_arg_parser)
 from ansible.module_utils.common.text.converters import to_bytes
-
+import glob
+import re
 
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
@@ -197,6 +198,12 @@ def get_archive(module):
     return Archive(module)
 
 
+# TODO this is only acceptable for USS files,
+# maybe use the function inside the class ?
+def is_archive(path):
+    return re.search(br'\.(tar|tar\.(gz|bz2|xz)|tgz|tbz2|zip)$', os.path.basename(path), re.IGNORECASE)
+
+
 def expand_paths(paths):
     expanded_path = []
     is_globby = False
@@ -209,7 +216,6 @@ def expand_paths(paths):
             e_paths = [b_path]
         expanded_path.extend(e_paths)
     return expanded_path, is_globby
-
 
 
 class Archive(object):
@@ -235,6 +241,14 @@ class Archive(object):
         self.expanded_exclude_paths = expand_paths(module.params['exclude_path'])[0]
 
         self.paths = sorted(set(self.expanded_paths) - set(self.expanded_exclude_paths))
+        
+        if not self.paths:
+            module.fail_json(
+                path=', '.join(paths),
+                # expanded_paths=_to_native(b', '.join(self.expanded_paths)),
+                # expanded_exclude_paths=_to_native(b', '.join(self.expanded_exclude_paths)),
+                msg='Error, no source paths were found'
+            )
 
 
 def run_module():
@@ -288,10 +302,22 @@ def run_module():
     try:
         parser = better_arg_parser.BetterArgParser(arg_defs)
         parsed_args = parser.parse_args(module.params)
+        module.params = parsed_args
     except ValueError as err:
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
 
+    # Get the proper archive handler based on src and dest type.
     archive = get_archive(module)
+    # Find the targets
+    archive.find_targets()
+    # If archive has targets:
+    #       
+    # Else:
+    #   if destination exists:
+    #
+    if archive.has_targets():
+
+
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
     # state with no modifications
