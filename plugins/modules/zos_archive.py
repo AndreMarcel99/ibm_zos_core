@@ -209,7 +209,11 @@ def get_archive(module):
     TODO Come up with rules to decide based on src, dest and format
     which archive handler to use.
     """
-
+    format = module.params.get("format")
+    if format in ["tar"]:
+        return TarArchive(module)
+    elif format in ["terse", "xmit"]:
+        return MVSArchive(module)
     return Archive(module)
 
 
@@ -284,7 +288,6 @@ class Archive(abc.ABCMeta, object):
         except Exception as e:
             self.errors.append('%s: %s' % (path, e))
 
-
     def add_targets(self):
         """
         Add targets invokes the add abstract methods, each Archive handler
@@ -333,27 +336,22 @@ class Archive(abc.ABCMeta, object):
             else:
                 self.targets.append(path)
 
-
     def is_different_from_original(self):
         if self.original_checksums is None:
             return self.original_size != self.destination_size()
         else:
             return self.original_checksums != self.destination_checksums()
 
-
     def destination_checksums(self):
         if self.destination_exists() and self.destination_readable():
             return self._get_checksums(self.destination)
         return None
 
-
     def destination_exists(self):
         return self.destination and os.path.exists(self.destination)
 
-
     def destination_readable(self):
         return self.destination and os.access(self.destination, os.R_OK)
-
 
     def destination_size(self):
         return os.path.getsize(self.destination) if self.destination_exists() else 0
@@ -382,48 +380,38 @@ class Archive(abc.ABCMeta, object):
                 dest=self.destination, msg='Error deleting some source files: ', files=self.errors
             )
 
-
     def is_archive(path):
         return re.search(br'\.(tar|tar\.(gz|bz2|xz)|tgz|tbz2|zip)$', os.path.basename(path), re.IGNORECASE)
-
 
     def has_targets(self):
         return bool(self.targets)
 
-
     def has_unfound_targets(self):
         return bool(self.not_found)
-
 
     @abc.abstractmethod
     def close(self):
         pass
 
-
     @abc.abstractmethod
     def contains(self, name):
         pass
-
 
     @abc.abstractmethod
     def open(self):
         pass
 
-
     @abc.abstractmethod
     def _add(self, path, archive_name):
         pass
-
 
     @abc.abstractmethod
     def _get_checksums(self, path):
         pass
 
-
     @abc.abstractmethod
     def _list_targets(self):
         pass
-
 
     @property
     def result(self):
@@ -442,49 +430,42 @@ class Archive(abc.ABCMeta, object):
 class TarArchive():
     def __init__(self, module):
         super(ZipArchive, self).__init__(module)
-    
 
     def close(self):
         self.file.close()
-
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
             self.file.write(path, archive_name)
 
     def open(self):
-        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True) 
+        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True)
 
 
 class ZipArchive():
     def __init__(self, module):
         super(ZipArchive, self).__init__(module)
-    
 
     def close(self):
         self.file.close()
-
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
             self.file.write(path, archive_name)
 
     def open(self):
-        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True) 
+        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True)
 
 
 class MVSArchive():
     def __init__(self, module):
         super(MVSArchive, self).__init__(module)
-    
 
     def close(self):
         pass
 
-
     def open(self):
         pass
-
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
@@ -547,7 +528,7 @@ def run_module():
     try:
         parser = better_arg_parser.BetterArgParser(arg_defs)
         parsed_args = parser.parse_args(module.params)
-        # TODO Is is ok to override module.params with parsed_args ? 
+        # TODO Is is ok to override module.params with parsed_args ?
         module.params = parsed_args
     except ValueError as err:
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
