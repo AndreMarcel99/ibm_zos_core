@@ -171,6 +171,14 @@ import glob
 import re
 import os
 import abc
+import zipfile
+import tarfile
+from fnmatch import fnmatch
+
+try:
+    from zoautil_py import datasets
+except Exception:
+    Datasets = MissingZOAUImport()
 
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
@@ -180,6 +188,10 @@ STATE_INCOMPLETE = 'incomplete'
 
 def _to_bytes(s):
     return to_bytes(s, errors='surrogate_or_strict')
+
+
+def matches_exclusion_patterns(path, exclusion_patterns):
+    return any(fnmatch(path, p) for p in exclusion_patterns)
 
 
 def get_archive(module):
@@ -200,8 +212,9 @@ def get_archive(module):
 
     return Archive(module)
 
+
 def common_path(paths):
-    empty = b'' if paths and isinstance(paths[0], six.binary_type) else ''
+    empty = b'' if paths else ''
 
     return os.path.join(
         os.path.dirname(os.path.commonprefix([os.path.join(os.path.dirname(p), empty) for p in paths])), empty
@@ -226,7 +239,7 @@ def strip_prefix(prefix, string):
     return string[len(prefix):] if string.startswith(prefix) else string
 
 
-class Archive(abc.ABCMeta):
+class Archive(abc.ABCMeta, object):
     def __init__(self, module):
         self.module = module
         self.dest = module.params['dest']
@@ -260,6 +273,8 @@ class Archive(abc.ABCMeta):
 
         self.root = common_path(self.paths)
 
+        self.original_checksums = self.destination_checksums()
+        self.original_size = self.destination_size()
 
     def add(self, path, archive_name):
         try:
@@ -272,7 +287,8 @@ class Archive(abc.ABCMeta):
 
     def add_targets(self):
         """
-        
+        Add targets invokes the add abstract methods, each Archive handler
+        will implement it differently.
         """
         self.open()
 
@@ -296,15 +312,15 @@ class Archive(abc.ABCMeta):
                 archive_format = 'tar.' + self.format
             self.module.fail_json(
                 msg='Error when writing %s archive at %s: %s' % (
-                    archive_format, _to_native(self.destination), _to_native(e)
+                    archive_format, self.destination, e
                 ),
-                exception=format_exc()
+                exception=e
             )
         self.close()
 
         if self.errors:
             self.module.fail_json(
-                msg='Errors when writing archive at %s: %s' % (_to_native(self.destination), '; '.join(self.errors))
+                msg='Errors when writing archive at %s: %s' % (self.destination, '; '.join(self.errors))
             )
 
     def find_targets(self):
@@ -318,12 +334,65 @@ class Archive(abc.ABCMeta):
                 self.targets.append(path)
 
 
+    def is_different_from_original(self):
+        if self.original_checksums is None:
+            return self.original_size != self.destination_size()
+        else:
+            return self.original_checksums != self.destination_checksums()
+
+
+    def destination_checksums(self):
+        if self.destination_exists() and self.destination_readable():
+            return self._get_checksums(self.destination)
+        return None
+
+
+    def destination_exists(self):
+        return self.destination and os.path.exists(self.destination)
+
+
+    def destination_readable(self):
+        return self.destination and os.access(self.destination, os.R_OK)
+
+
+    def destination_size(self):
+        return os.path.getsize(self.destination) if self.destination_exists() else 0
+
+    def remove_targets(self):
+        for path in self.successes:
+            if os.path.exists(path):
+                try:
+                    if os.path.isdir(path):
+                        # remove tree
+                        None
+                    else:
+                        os.remove(path)
+                except OSError:
+                    self.errors.append(path)
+        for path in self.paths:
+            try:
+                if os.path.isdir(path):
+                    # remove tree
+                    None
+            except OSError:
+                self.errors.append(path)
+
+        if self.errors:
+            self.module.fail_json(
+                dest=self.destination, msg='Error deleting some source files: ', files=self.errors
+            )
+
+
     def is_archive(path):
         return re.search(br'\.(tar|tar\.(gz|bz2|xz)|tgz|tbz2|zip)$', os.path.basename(path), re.IGNORECASE)
 
 
-    def has_targets(self)
+    def has_targets(self):
         return bool(self.targets)
+
+
+    def has_unfound_targets(self):
+        return bool(self.not_found)
 
 
     @abc.abstractmethod
@@ -368,6 +437,63 @@ class Archive(abc.ABCMeta):
             'expanded_paths': [p for p in self.expanded_paths],
             'expanded_exclude_paths': [p for p in self.expanded_exclude_paths],
         }
+
+
+class TarArchive():
+    def __init__(self, module):
+        super(ZipArchive, self).__init__(module)
+    
+
+    def close(self):
+        self.file.close()
+
+
+    def _add(self, path, archive_name):
+        if not matches_exclusion_patterns(path, self.exclusion_patterns):
+            self.file.write(path, archive_name)
+
+    def open(self):
+        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True) 
+
+
+class ZipArchive():
+    def __init__(self, module):
+        super(ZipArchive, self).__init__(module)
+    
+
+    def close(self):
+        self.file.close()
+
+
+    def _add(self, path, archive_name):
+        if not matches_exclusion_patterns(path, self.exclusion_patterns):
+            self.file.write(path, archive_name)
+
+    def open(self):
+        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True) 
+
+
+class MVSArchive():
+    def __init__(self, module):
+        super(MVSArchive, self).__init__(module)
+    
+
+    def close(self):
+        pass
+
+
+    def open(self):
+        pass
+
+
+    def _add(self, path, archive_name):
+        if not matches_exclusion_patterns(path, self.exclusion_patterns):
+            return_content = datasets.zip(path, archive_name)
+            stdout = return_content.stdout_response
+            stderr = return_content.stderr_response
+            rc = return_content.rc
+            if rc != 0:
+                self.module.fail_json(msg="Error creating MVS archive", stderr=str(stderr))
 
 
 def run_module():
