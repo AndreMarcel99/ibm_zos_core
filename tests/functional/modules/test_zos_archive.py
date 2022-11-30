@@ -52,7 +52,7 @@ def set_uss_test_env(ansible_zos_module, test_files):
     # "bz2",
     # "pax",
 ])
-def test_uss_archive(ansible_zos_module):
+def test_uss_archive(ansible_zos_module, format):
     try:
         hosts = ansible_zos_module
         expected_state = STATE_ARCHIVED if format in ['tar', 'zip'] else STATE_COMPRESSED
@@ -76,7 +76,7 @@ pytest.mark.parametrize(
         "terse",
         # "xmit",
         ])
-def test_mvs_archive(ansible_zos_module):
+def test_mvs_archive(ansible_zos_module, format):
     try:
         hosts = ansible_zos_module
         hosts.all.file(path=USS_TEMP_DIR, state="directory")

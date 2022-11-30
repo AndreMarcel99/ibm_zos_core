@@ -81,6 +81,13 @@ options:
       - When left unspecified, it uses the current user unless you are root, in which case it can preserve the previous ownership.
     type: str
     required: false
+  exclusion_patterns:
+    description:
+      - Glob style patterns to exclude files or directories from the resulting archive.
+      - This differs from I(exclude_path) which applies only to the source paths from I(path).
+    type: list
+    elements: path
+    required: false
   remove:
     description:
       - Remove any added source files and trees after adding to archive.
@@ -166,13 +173,15 @@ expanded_exclude_paths:
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils import (
     better_arg_parser)
-from ansible.module_utils.common.text.converters import to_bytes
+from ansible.module_utils.common.text.converters import to_bytes, to_native
 import glob
 import re
 import os
 import abc
 import zipfile
 import tarfile
+# import io
+from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.data_set import DataSet
 from fnmatch import fnmatch
 
 try:
@@ -189,6 +198,11 @@ STATE_INCOMPLETE = 'incomplete'
 def _to_bytes(s):
     return to_bytes(s, errors='surrogate_or_strict')
 
+def _to_native(s):
+    return to_native(s, errors='surrogate_or_strict')
+
+def _to_native_ascii(s):
+    return to_native(s, errors='surrogate_or_strict', encoding='ascii')
 
 def matches_exclusion_patterns(path, exclusion_patterns):
     return any(fnmatch(path, p) for p in exclusion_patterns)
@@ -214,7 +228,7 @@ def get_archive(module):
         return TarArchive(module)
     elif format in ["terse", "xmit"]:
         return MVSArchive(module)
-    return Archive(module)
+    return ZipArchive(module)
 
 
 def common_path(paths):
@@ -243,10 +257,10 @@ def strip_prefix(prefix, string):
     return string[len(prefix):] if string.startswith(prefix) else string
 
 
-class Archive(abc.ABCMeta, object):
+class Archive(abc.ABC):
     def __init__(self, module):
         self.module = module
-        self.dest = module.params['dest']
+        self.destination = module.params['dest']
         self.exclusion_patterns = module.params['exclusion_patterns'] or []
         self.format = module.params['format']
         self.must_archive = module.params['force_archive']
@@ -282,11 +296,11 @@ class Archive(abc.ABCMeta, object):
 
     def add(self, path, archive_name):
         try:
-            self._add(path, archive_name)
-            if self.contains(archive_name):
+            self._add(_to_native_ascii(path), _to_native(archive_name))
+            if self.contains(_to_native(archive_name)):
                 self.successes.append(path)
         except Exception as e:
-            self.errors.append('%s: %s' % (path, e))
+            self.errors.append('%s: %s' % (_to_native_ascii(path), _to_native(e)))
 
     def add_targets(self):
         """
@@ -424,48 +438,110 @@ class Archive(abc.ABCMeta, object):
             'missing': [p for p in self.not_found],
             'expanded_paths': [p for p in self.expanded_paths],
             'expanded_exclude_paths': [p for p in self.expanded_exclude_paths],
+            # tmp debug variables
+            'tmp_debug' : None,
+            'targets' : self.targets,
         }
 
 
-class TarArchive():
+class TarArchive(Archive):
+    def __init__(self, module):
+        super(TarArchive, self).__init__(module)
+        self.fileIO = None
+
+    def open(self):
+        if self.format in ('gz', 'bz2'):
+            self.file = tarfile.open(_to_native_ascii(self.destination), 'w|' + self.format)
+        # python3 tarfile module allows xz format but for python2 we have to create the tarfile
+        # in memory and then compress it with lzma.
+        # elif self.format == 'xz':
+        #     self.fileIO = io.BytesIO()
+        #     self.file = tarfile.open(fileobj=self.fileIO, mode='w')
+        elif self.format == 'tar':
+            self.file = tarfile.open(_to_native_ascii(self.destination), 'w')
+        else:
+            self.module.fail_json(msg="%s is not a valid archive format" % self.format)
+
+    def close(self):
+        self.file.close()
+        # if self.format == 'xz':
+        #     with lzma.open(_to_native(self.destination), 'wb') as f:
+        #         f.write(self.fileIO.getvalue())
+        #     self.fileIO.close()
+
+    def _add(self, path, archive_name):
+        if not matches_exclusion_patterns(path, self.exclusion_patterns):
+            self.file.write(_to_bytes(path), archive_name)
+    
+    def contains(self, name):
+        try:
+            self.file.getmember(name)
+        except KeyError:
+            return False
+        return True
+
+    def _add(self, path, archive_name):
+        def py26_filter(path):
+            return matches_exclusion_patterns(path, self.exclusion_patterns)
+
+        self.file.add(path, archive_name, recursive=False, exclude=py26_filter)
+
+    def _get_checksums(self, path):
+        pass
+
+    def _list_targets(self):
+         pass
+
+class ZipArchive(Archive):
     def __init__(self, module):
         super(ZipArchive, self).__init__(module)
+
+    def open(self):
+        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True)
 
     def close(self):
         self.file.close()
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            self.file.write(path, archive_name)
+            self.file.write(_to_bytes(path), archive_name)
 
-    def open(self):
-        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True)
+    def contains(self, name):
+        try:
+            self.file.getinfo(name)
+        except KeyError:
+            return False
+        return True
 
+    def _get_checksums(self, path):
+        try:
+            archive = zipfile.ZipFile(path, 'r')
+            checksums = set((info.filename, info.CRC) for info in archive.infolist())
+            archive.close()
+        except zipfile.BadZipFile:
+            checksums = set()
+        return checksums
 
-class ZipArchive():
-    def __init__(self, module):
-        super(ZipArchive, self).__init__(module)
-
-    def close(self):
-        self.file.close()
-
-    def _add(self, path, archive_name):
-        if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            self.file.write(path, archive_name)
-
-    def open(self):
-        self.file = zipfile.ZipFile(self.destination, 'w', zipfile.ZIP_DEFLATED, True)
-
+    def _list_targets(self):
+         pass
 
 class MVSArchive():
     def __init__(self, module):
         super(MVSArchive, self).__init__(module)
 
+    def open(self):
+        pass
+
     def close(self):
         pass
 
-    def open(self):
-        pass
+    def find_targets(self):
+        # do a dls to get the file ?
+        for path in self.paths:
+            if DataSet.data_set_exists(path):
+                self.targets.append(path)
+            else:
+                self.not_found.append(path)
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
@@ -476,6 +552,8 @@ class MVSArchive():
             if rc != 0:
                 self.module.fail_json(msg="Error creating MVS archive", stderr=str(stderr))
 
+    def _list_targets(self):
+         pass
 
 def run_module():
     module = AnsibleModule(
@@ -490,6 +568,7 @@ def run_module():
             mode=dict(type='str', default=''),
             owner=dict(type='str', default=''),
             remove=dict(type='bool', default=False),
+            exclusion_patterns=dict(type='list', elements='path'),
             # Q1 I think this parameter name should be replace.
             replace_dest=dict(type='bool', default=False, alias='force'),
             list=dict(type='bool', default=False),
@@ -509,6 +588,7 @@ def run_module():
         mode=dict(type='str', default=''),
         owner=dict(type='str', default=''),
         remove=dict(type='bool', default=False),
+        exclusion_patterns=dict(type='list', elements='path'),
         # Q1 I think this parameter name should be replace.
         replace_dest=dict(type='bool', default=False, alias='force'),
         list=dict(type='bool', default=False),
@@ -538,19 +618,20 @@ def run_module():
     # Find the targets
     archive.find_targets()
     if archive.has_targets():
-        if archive.must_archive:
-            archive.add_targets()
-            archive.destination_state = STATE_INCOMPLETE if archive.has_unfound_targets() else STATE_ARCHIVED
-            archive.changed = archive.is_different_from_original()
-            if archive.remove:
-                archive.remove_targets()
+        #if archive.must_archive:
+        archive.add_targets()
+        archive.destination_state = STATE_INCOMPLETE if archive.has_unfound_targets() else STATE_ARCHIVED
+        archive.changed = archive.is_different_from_original()
+        if archive.remove:
+            archive.remove_targets()
     else:
         if archive.destination_exists():
             # If destination exists then we verify is an archive.
             archive.destination_state = STATE_ARCHIVED if archive.is_archive(archive.destination) else STATE_COMPRESSED
 
     if archive.destination_exists():
-        archive.update_permissions()
+        None
+        # archive.update_permissions()
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
     # state with no modifications
