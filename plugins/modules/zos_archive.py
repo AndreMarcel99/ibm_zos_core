@@ -172,7 +172,8 @@ expanded_exclude_paths:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils import (
-    better_arg_parser)
+    better_arg_parser,
+    data_set)
 from ansible.module_utils.common.text.converters import to_bytes, to_native
 import glob
 import re
@@ -185,10 +186,11 @@ from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.data_set import D
 from fnmatch import fnmatch
 
 try:
-    from zoautil_py import datasets
+    from zoautil_py import datasets, mvscmd, types
 except Exception:
     Datasets = MissingZOAUImport()
-
+    mvscmd = MissingZOAUImport()
+    types = MissingZOAUImport()
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
@@ -227,7 +229,7 @@ def get_archive(module):
     if format in ["tar"]:
         return TarArchive(module)
     elif format in ["terse", "xmit"]:
-        return MVSArchive(module)
+        return AMATerseArchive(module)
     return ZipArchive(module)
 
 
@@ -265,7 +267,7 @@ class Archive(abc.ABC):
         self.format = module.params['format']
         self.must_archive = module.params['force_archive']
         self.remove = module.params['remove']
-
+        self.tmp_hlq = module.params['tmp_hlq']
         self.changed = False
         self.destination_state = STATE_ABSENT
         self.errors = []
@@ -276,20 +278,27 @@ class Archive(abc.ABC):
 
         paths = module.params['path']
 
-        self.expanded_paths, has_globs = expand_paths(paths)
-        self.expanded_exclude_paths = expand_paths(module.params['exclude_path'])[0]
+        if self.format == 'terse':
+            self.paths = paths
+            self.expanded_paths, self.has_globs = "", ""
+            self.expanded_exclude_paths = ""
+            self.root = ""
+        else:
+            self.expanded_paths, self.has_globs = expand_paths(paths)
+            self.expanded_exclude_paths = expand_paths(module.params['exclude_path'])[0]
 
-        self.paths = sorted(set(self.expanded_paths) - set(self.expanded_exclude_paths))
+            self.paths = sorted(set(self.expanded_paths) - set(self.expanded_exclude_paths))
 
-        if not self.paths:
-            module.fail_json(
-                path=', '.join(paths),
-                # expanded_paths=_to_native(b', '.join(self.expanded_paths)),
-                # expanded_exclude_paths=_to_native(b', '.join(self.expanded_exclude_paths)),
-                msg='Error, no source paths were found'
-            )
+            if not self.paths:
+                module.fail_json(
+                    path=', '.join(paths),
+                    # expanded_paths=_to_native(b', '.join(self.expanded_paths)),
+                    # expanded_exclude_paths=_to_native(b', '.join(self.expanded_exclude_paths)),
+                    msg='Error, no source paths were found'
+                )
 
-        self.root = common_path(self.paths)
+            self.root = common_path(self.paths)
+        self.tmp_debug = ""
 
         self.original_checksums = self.destination_checksums()
         self.original_size = self.destination_size()
@@ -439,10 +448,9 @@ class Archive(abc.ABC):
             'expanded_paths': [p for p in self.expanded_paths],
             'expanded_exclude_paths': [p for p in self.expanded_exclude_paths],
             # tmp debug variables
-            'tmp_debug' : None,
+            'tmp_debug' : self.tmp_debug,
             'targets' : self.targets,
         }
-
 
 class TarArchive(Archive):
     def __init__(self, module):
@@ -525,9 +533,10 @@ class ZipArchive(Archive):
     def _list_targets(self):
          pass
 
-class MVSArchive():
+class MVSArchive(Archive):
     def __init__(self, module):
         super(MVSArchive, self).__init__(module)
+        self.paths = [_to_native_ascii(p) for p in self.paths]
 
     def open(self):
         pass
@@ -536,39 +545,161 @@ class MVSArchive():
         pass
 
     def find_targets(self):
-        # do a dls to get the file ?
         for path in self.paths:
             if DataSet.data_set_exists(path):
                 self.targets.append(path)
             else:
                 self.not_found.append(path)
+    
+    def add_targets(self):
+        for target in self.targets:
+                self._add(target, self.destination)
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            return_content = datasets.zip(path, archive_name)
-            stdout = return_content.stdout_response
-            stderr = return_content.stderr_response
-            rc = return_content.rc
+            rc = datasets.zip( archive_name, path)
             if rc != 0:
-                self.module.fail_json(msg="Error creating MVS archive", stderr=str(stderr))
+                self.module.fail_json(msg="Error creating MVS archive")
+            self.successes.append(path)
 
     def _list_targets(self):
          pass
 
+    def _get_checksums(self, path):
+        pass
+
+    def contains(self):
+        pass
+
+    def is_different_from_original(self):
+        return True
+
+class AMATerseArchive(MVSArchive):
+    def __init__(self, module):
+        super(AMATerseArchive, self).__init__(module)
+        # TODO get the pack arg from params
+        self.pack_arg = "SPACK"
+    
+    def prepare_temp_ds(self, tmphlq=""):
+        if tmphlq:
+            cmd = f"mvstmphelper {tmphlq}.DZIP"
+        else:
+            # TODO add hlq fetch
+            cmd = f"mvstmphelper OMVSADM.DZIP"
+        rc, temp_ds, err = self.module.run_command(cmd)
+        cmd = f"dtouch -ru -tseq {temp_ds}"
+        rc, stdout, err = self.module.run_command(cmd)
+        temp_ds = temp_ds.replace('\n', '')
+        return temp_ds
+    
+    def prepare_terse_ds(self, name):
+        cmd = f"dtouch -rfb -tseq -l1024 {name}"
+        rc, stdout, err = self.module.run_command(cmd)
+        return name
+
+    def dump_into_temp_ds(self, temp_ds):
+        """
+        Execute ADDRSU command here
+        echo " DUMP OUTDD(ARCHIVE) OPTIMIZE(4) DS(INCL(OMVSADM.ARCHIVE.TEST,)) " 
+        | mvscmdauthhelper --pgm=ADRDSSU --archive=OMVSADM.DZIP.P0000209.T0075822.C0000000,old 
+        --sysin=stdin --sysprint=*
+        """
+        dump_cmd = f""" DUMP OUTDDNAME(TARGET) -
+         OPTIMIZE(4) DS(INCL("""
+        
+        for target in self.targets:
+            dump_cmd += f" {target},"
+        dump_cmd += ' )'
+
+        # dump_cmd += ' ) TOL( ENQF IOER ) -'
+
+        dump_cmd += ' )'
+        # tmphlq = "OMVSADM"
+        # sysin = data_set.DataSet.create_temp(tmphlq)
+        # sysprint = data_set.DataSet.create_temp(tmphlq)
+
+        # datasets.write(sysin, dump_cmd)
+        # dd_statements = []
+        # dd_statements.append(
+        #     types.DDStatement(
+        #         name="sysin", definition=types.DatasetDefinition(sysin)
+        #     )
+        # )
+        # dd_statements.append(
+        #     types.DDStatement(
+        #         name="archive", definition=types.DatasetDefinition(temp_ds)
+        #     )
+        # )
+        # dd_statements.append(
+        #     types.DDStatement(
+        #         name="sysprint", definition=types.FileDefinition(sysprint)
+        #     )
+        # )
+        # response = mvscmd.execute_authorized(pgm="ADRDSSU", dds=dd_statements)
+        # rc, out, err = response.rc, response.stdout_response, response.stderr_response
+
+        cmd = f" mvscmdauth --pgm=ADRDSSU --TARGET={temp_ds},old --sysin=stdin --sysprint=*"
+        rc, out, err = self.module.run_command(cmd, data=dump_cmd)
+        
+        if rc != 0: 
+            self.module.fail_json(
+                msg=f"Failed executing ADRDSSU to archive {temp_ds}",
+                stdout=out,
+                stderr=err,
+                stdout_lines=dump_cmd,
+                rc=rc,
+            )
+        return rc
+
+    def _add(self, path, archive_name):
+        """ Execute AMATARSE command here
+        mvscmdhelper --pgm=AMATERSE --args='SPACK' --sysut1=OMVSADM.DZIP.P0000209.T0075822.C0000000 
+        --sysut2=OMVSADM.DZIP.P0000209.T0075822.C0000000.TRS --sysprint=*
+        """
+        cmd = f"mvscmdhelper --pgm=AMATERSE --args='{self.pack_arg}' --sysut1={path} --sysut2={archive_name} --sysprint=*"
+        rc, out, err = self.module.run_command(cmd)
+        if rc != 0:
+            self.module.fail_json(
+                msg=f"Failed executing AMATERSE to archive {path} into {archive_name}",
+                stdout=out,
+                stderr=err,
+                rc=rc,
+            )
+        self.successes = self.targets[:]
+        return rc
+
+    def add_targets(self):
+        # comment in case of using only one dataset
+        temp_ds = self.prepare_temp_ds()
+        # Uncomment in case of using only one dataset
+        # temp_ds = self.targets[0]
+        terse_ds = self.prepare_terse_ds(self.destination)
+        
+        # comment in case of using only one dataset
+        rc = self.dump_into_temp_ds(temp_ds)
+        # Uncomment in case of using only one dataset
+        # rc = 0
+        
+        if rc != 0:
+            # TODO
+            None 
+            # module.fail_json
+        rc = self._add(temp_ds, terse_ds)
+
 def run_module():
     module = AnsibleModule(
         argument_spec=dict(
-            path=dict(type='list', elements='path', required=True, alias='src'),
+            path=dict(type='list', elements='str', required=True, alias='src'),
             dest=dict(type='str'),
-            exclude_path=dict(type='list', elements='path', default=[]),
+            exclude_path=dict(type='list', elements='str', default=[]),
             # Q1 I think we should use force in here instead of down, and change that one to replace.
             force_archive=dict(type='bool', default=False),
-            format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip']),
+            format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse']),
             group=dict(type='str', default=''),
             mode=dict(type='str', default=''),
             owner=dict(type='str', default=''),
             remove=dict(type='bool', default=False),
-            exclusion_patterns=dict(type='list', elements='path'),
+            exclusion_patterns=dict(type='list', elements='str'),
             # Q1 I think this parameter name should be replace.
             replace_dest=dict(type='bool', default=False, alias='force'),
             list=dict(type='bool', default=False),
@@ -578,17 +709,17 @@ def run_module():
     )
 
     arg_defs = dict(
-        path=dict(type='list', elements='path', required=True, alias='src'),
+        path=dict(type='list', elements='str', required=True, alias='src'),
         dest=dict(type='str', required=False),
-        exclude_path=dict(type='list', elements='path', default=[]),
+        exclude_path=dict(type='list', elements='str', default=[]),
         # Q1 I think we should use force in here instead of down, and change that one to replace.
         force_archive=dict(type='bool', default=False),
-        format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip']),
+        format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse']),
         group=dict(type='str', default=''),
         mode=dict(type='str', default=''),
         owner=dict(type='str', default=''),
         remove=dict(type='bool', default=False),
-        exclusion_patterns=dict(type='list', elements='path'),
+        exclusion_patterns=dict(type='list', elements='str'),
         # Q1 I think this parameter name should be replace.
         replace_dest=dict(type='bool', default=False, alias='force'),
         list=dict(type='bool', default=False),
@@ -608,7 +739,7 @@ def run_module():
     try:
         parser = better_arg_parser.BetterArgParser(arg_defs)
         parsed_args = parser.parse_args(module.params)
-        # TODO Is is ok to override module.params with parsed_args ?
+        # TODO Is it ok to override module.params with parsed_args ?
         module.params = parsed_args
     except ValueError as err:
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
