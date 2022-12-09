@@ -605,39 +605,16 @@ class AMATerseArchive(MVSArchive):
         --sysin=stdin --sysprint=*
         """
         dump_cmd = f""" DUMP OUTDDNAME(TARGET) -
-         OPTIMIZE(4) DS(INCL("""
+         OPTIMIZE(4) DS(INCL( - """
         
         for target in self.targets:
-            dump_cmd += f" {target},"
+            dump_cmd += f"\n {target}, - "
+        dump_cmd += '\n ) '
+
+        # dump_cmd += '- \n ) TOL( ENQF IOER ) '
+
         dump_cmd += ' )'
-
-        # dump_cmd += ' ) TOL( ENQF IOER ) -'
-
-        dump_cmd += ' )'
-        # tmphlq = "OMVSADM"
-        # sysin = data_set.DataSet.create_temp(tmphlq)
-        # sysprint = data_set.DataSet.create_temp(tmphlq)
-
-        # datasets.write(sysin, dump_cmd)
-        # dd_statements = []
-        # dd_statements.append(
-        #     types.DDStatement(
-        #         name="sysin", definition=types.DatasetDefinition(sysin)
-        #     )
-        # )
-        # dd_statements.append(
-        #     types.DDStatement(
-        #         name="archive", definition=types.DatasetDefinition(temp_ds)
-        #     )
-        # )
-        # dd_statements.append(
-        #     types.DDStatement(
-        #         name="sysprint", definition=types.FileDefinition(sysprint)
-        #     )
-        # )
-        # response = mvscmd.execute_authorized(pgm="ADRDSSU", dds=dd_statements)
-        # rc, out, err = response.rc, response.stdout_response, response.stderr_response
-
+        
         cmd = f" mvscmdauth --pgm=ADRDSSU --TARGET={temp_ds},old --sysin=stdin --sysprint=*"
         rc, out, err = self.module.run_command(cmd, data=dump_cmd)
         
