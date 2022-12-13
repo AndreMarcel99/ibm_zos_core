@@ -191,6 +191,24 @@ except Exception:
     Datasets = MissingZOAUImport()
     mvscmd = MissingZOAUImport()
     types = MissingZOAUImport()
+
+
+LZMA_IMP_ERR = None
+if six.PY3:
+    try:
+        import lzma
+        HAS_LZMA = True
+    except ImportError:
+        LZMA_IMP_ERR = format_exc()
+        HAS_LZMA = False
+else:
+    try:
+        from backports import lzma
+        HAS_LZMA = True
+    except ImportError:
+        LZMA_IMP_ERR = format_exc()
+        HAS_LZMA = False
+        
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
@@ -457,36 +475,32 @@ class TarArchive(Archive):
         super(TarArchive, self).__init__(module)
         self.fileIO = None
 
-    def open(self):
-        if self.format in ('gz', 'bz2'):
-            self.file = tarfile.open(_to_native_ascii(self.destination), 'w|' + self.format)
-        # python3 tarfile module allows xz format but for python2 we have to create the tarfile
-        # in memory and then compress it with lzma.
-        # elif self.format == 'xz':
-        #     self.fileIO = io.BytesIO()
-        #     self.file = tarfile.open(fileobj=self.fileIO, mode='w')
-        elif self.format == 'tar':
-            self.file = tarfile.open(_to_native_ascii(self.destination), 'w')
-        else:
-            self.module.fail_json(msg="%s is not a valid archive format" % self.format)
-
     def close(self):
         self.file.close()
-        # if self.format == 'xz':
-        #     with lzma.open(_to_native(self.destination), 'wb') as f:
-        #         f.write(self.fileIO.getvalue())
-        #     self.fileIO.close()
+        if self.format == 'xz':
+            with lzma.open(_to_native(self.destination), 'wb') as f:
+                f.write(self.fileIO.getvalue())
+            self.fileIO.close()
 
-    def _add(self, path, archive_name):
-        if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            self.file.write(_to_bytes(path), archive_name)
-    
     def contains(self, name):
         try:
             self.file.getmember(name)
         except KeyError:
             return False
         return True
+
+    def open(self):
+        if self.format in ('gz', 'bz2'):
+            self.file = tarfile.open(_to_native_ascii(self.destination), 'w|' + self.format)
+        # python3 tarfile module allows xz format but for python2 we have to create the tarfile
+        # in memory and then compress it with lzma.
+        elif self.format == 'xz':
+            self.fileIO = io.BytesIO()
+            self.file = tarfile.open(fileobj=self.fileIO, mode='w')
+        elif self.format == 'tar':
+            self.file = tarfile.open(_to_native_ascii(self.destination), 'w')
+        else:
+            self.module.fail_json(msg="%s is not a valid archive format" % self.format)
 
     def _add(self, path, archive_name):
         def py26_filter(path):
@@ -495,7 +509,31 @@ class TarArchive(Archive):
         self.file.add(path, archive_name, recursive=False, exclude=py26_filter)
 
     def _get_checksums(self, path):
-        pass
+        if HAS_LZMA:
+            LZMAError = lzma.LZMAError
+        else:
+            # Just picking another exception that's also listed below
+            LZMAError = tarfile.ReadError
+        try:
+            if self.format == 'xz':
+                with lzma.open(_to_native_ascii(path), 'r') as f:
+                    archive = tarfile.open(fileobj=f)
+                    checksums = set((info.name, info.chksum) for info in archive.getmembers())
+                    archive.close()
+            else:
+                archive = tarfile.open(_to_native_ascii(path), 'r|' + self.format)
+                checksums = set((info.name, info.chksum) for info in archive.getmembers())
+                archive.close()
+        except (LZMAError, tarfile.ReadError, tarfile.CompressionError):
+            try:
+                # The python implementations of gzip, bz2, and lzma do not support restoring compressed files
+                # to their original names so only file checksum is returned
+                f = self._open_compressed_file(_to_native_ascii(path), 'r')
+                checksums = set([(b'', crc32(f.read()))])
+                f.close()
+            except Exception:
+                checksums = set()
+        return checksums
 
     def _list_targets(self):
          pass
