@@ -179,9 +179,11 @@ import glob
 import re
 import os
 import abc
+import io
 import zipfile
 import tarfile
-# import io
+from traceback import format_exc
+from zlib import crc32
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.data_set import DataSet
 from fnmatch import fnmatch
 
@@ -194,20 +196,12 @@ except Exception:
 
 
 LZMA_IMP_ERR = None
-if six.PY3:
-    try:
-        import lzma
-        HAS_LZMA = True
-    except ImportError:
-        LZMA_IMP_ERR = format_exc()
-        HAS_LZMA = False
-else:
-    try:
-        from backports import lzma
-        HAS_LZMA = True
-    except ImportError:
-        LZMA_IMP_ERR = format_exc()
-        HAS_LZMA = False
+try:
+    import lzma
+    HAS_LZMA = True
+except ImportError:
+    LZMA_IMP_ERR = format_exc()
+    HAS_LZMA = False
         
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
@@ -503,10 +497,10 @@ class TarArchive(Archive):
             self.module.fail_json(msg="%s is not a valid archive format" % self.format)
 
     def _add(self, path, archive_name):
-        def py26_filter(path):
-            return matches_exclusion_patterns(path, self.exclusion_patterns)
+        def py27_filter(tarinfo):
+            return None if matches_exclusion_patterns(tarinfo.name, self.exclusion_patterns) else tarinfo
 
-        self.file.add(path, archive_name, recursive=False, exclude=py26_filter)
+        self.file.add(path, archive_name, recursive=False, filter=py27_filter)
 
     def _get_checksums(self, path):
         if HAS_LZMA:
@@ -688,18 +682,22 @@ class AMATerseArchive(MVSArchive):
         temp_ds = self.prepare_temp_ds()
         # Uncomment in case of using only one dataset
         # temp_ds = self.targets[0]
-        terse_ds = self.prepare_terse_ds(self.destination)
+        try:
+            terse_ds = self.prepare_terse_ds(self.destination)
+            # comment in case of using only one dataset
+            rc = self.dump_into_temp_ds(temp_ds)
+            # Uncomment in case of using only one dataset
+            # rc = 0
+            
+            if rc != 0:
+                # TODO
+                None 
+                # module.fail_json
         
-        # comment in case of using only one dataset
-        rc = self.dump_into_temp_ds(temp_ds)
-        # Uncomment in case of using only one dataset
-        # rc = 0
+            rc = self._add(temp_ds, terse_ds)
+        finally: 
+            datasets.delete(temp_ds)
         
-        if rc != 0:
-            # TODO
-            None 
-            # module.fail_json
-        rc = self._add(temp_ds, terse_ds)
 
 def run_module():
     module = AnsibleModule(
