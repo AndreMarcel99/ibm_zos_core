@@ -52,23 +52,30 @@ def set_uss_test_env(ansible_zos_module, test_files):
 # Test archive with no options
 @pytest.mark.parametrize("format", USS_FORMATS)
 @pytest.mark.parametrize("path", [
-    dict(files= f"{USS_TEMP_DIR}/*.txt" , size=len(USS_TEST_FILES)), 
+    dict(files= f"{USS_TEMP_DIR}/*.txt" , size=len(USS_TEST_FILES)),
     dict(files=list(USS_TEST_FILES.keys()),  size=len(USS_TEST_FILES)), 
-    dict(files=list(USS_TEST_FILES.keys())[0],  size=1), ])
+    dict(files=list(USS_TEST_FILES.keys())[0],  size=1),
+    dict(files= f"{USS_TEMP_DIR}/" , size=len(USS_TEST_FILES)),  ])
 def test_uss_archive(ansible_zos_module, format, path):
     try:
         hosts = ansible_zos_module
         expected_state = STATE_ARCHIVED if format in ['tar', 'zip'] else STATE_COMPRESSED
+        hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
         hosts.all.file(path=USS_TEMP_DIR, state="directory")
         set_uss_test_env(hosts, USS_TEST_FILES)
         # set test env
         archive_result = hosts.all.zos_archive( path=path.get("files"),
                                         dest=f"{USS_TEMP_DIR}/archive.{format}",
                                         format=format)
+
+        size = path.get("size")
+        if format == "zip" and path.get("files") == f"{USS_TEMP_DIR}/":
+            size += 1
+        
         for result in archive_result.contacted.values():
             assert result.get("changed") is True
             assert result.get("dest_state") == expected_state
-            assert len(result.get("targets")) == path.get("size")
+            assert len(result.get("archived")) == size
             # TODO assert that the file with expected extension exists.
             # cmd_result = hosts.all.shell(cmd="")
     finally:
