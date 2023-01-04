@@ -52,9 +52,9 @@ def set_uss_test_env(ansible_zos_module, test_files):
 # Test archive with no options
 @pytest.mark.parametrize("format", USS_FORMATS)
 @pytest.mark.parametrize("path", [
-    { "files" : f"{USS_TEMP_DIR}/*.txt" , "size" : len(USS_TEST_FILES)}, 
-    { "files": list(USS_TEST_FILES.keys()),  "size" : len(USS_TEST_FILES)}, 
-    { "files": list(USS_TEST_FILES.keys())[0],  "size" : 1 }, ])
+    dict(files= f"{USS_TEMP_DIR}/*.txt" , size=len(USS_TEST_FILES)), 
+    dict(files=list(USS_TEST_FILES.keys()),  size=len(USS_TEST_FILES)), 
+    dict(files=list(USS_TEST_FILES.keys())[0],  size=1), ])
 def test_uss_archive(ansible_zos_module, format, path):
     try:
         hosts = ansible_zos_module
