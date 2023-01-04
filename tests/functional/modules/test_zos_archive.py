@@ -25,53 +25,57 @@ from tempfile import mkstemp
 __metaclass__ = type
 
 SHELL_EXECUTABLE = "/bin/sh"
-USS_TEST_FILES = {  "foo.txt" : "foo sample content",
-                    "bar.txt": "bar sample content", 
-                    "empty.txt":""}
 USS_TEMP_DIR = "/tmp/archive"
+USS_TEST_FILES = {  f"{USS_TEMP_DIR}/foo.txt" : "foo sample content",
+                    f"{USS_TEMP_DIR}/bar.txt": "bar sample content", 
+                    f"{USS_TEMP_DIR}/empty.txt":""}
+
 TEST_PS = "USER.PRIVATE.TESTDS"
 USS_DEST_ARCHIVE = "testarchive.dzp"
 
-STATE_ARCHIVED = "archived"
-STATE_COMPRESSED = "compressed"
+STATE_ABSENT = 'absent'
+STATE_ARCHIVED = 'archive'
+STATE_COMPRESSED = 'compress'
+STATE_INCOMPLETE = 'incomplete'
+
+USS_FORMATS = ["tar", "zip"]
 
 def set_uss_test_env(ansible_zos_module, test_files):
     temp_dir = USS_TEMP_DIR
     for key, value in test_files.items():
         ansible_zos_module.all.shell(
-            cmd=f"echo \"{value}\" > \"{temp_dir}/{key}\"",
+            cmd=f"echo \"{value}\" > \"{key}\"",
             executable=SHELL_EXECUTABLE,
         )
 
 # Core functionality tests
-@pytest.mark.parametrize(
-    "format", [
-    "tar",
-    "zip",
-    # "gz",
-    # "bz2",
-    # "pax",
-])
-def test_uss_archive(ansible_zos_module, format):
+# Test archive with no options
+@pytest.mark.parametrize("format", USS_FORMATS)
+@pytest.mark.parametrize("path", [
+    { "files" : f"{USS_TEMP_DIR}/*.txt" , "size" : len(USS_TEST_FILES)}, 
+    { "files": list(USS_TEST_FILES.keys()),  "size" : len(USS_TEST_FILES)}, 
+    { "files": list(USS_TEST_FILES.keys())[0],  "size" : 1 }, ])
+def test_uss_archive(ansible_zos_module, format, path):
     try:
         hosts = ansible_zos_module
         expected_state = STATE_ARCHIVED if format in ['tar', 'zip'] else STATE_COMPRESSED
         hosts.all.file(path=USS_TEMP_DIR, state="directory")
         set_uss_test_env(hosts, USS_TEST_FILES)
         # set test env
-        archive_result = hosts.all.zos_archive( path=f"{USS_TEMP_DIR}/*.txt",
+        archive_result = hosts.all.zos_archive( path=path.get("files"),
                                         dest=f"{USS_TEMP_DIR}/archive.{format}",
                                         format=format)
         for result in archive_result.contacted.values():
             assert result.get("changed") is True
-            assert result.get("state") == expected_state
+            assert result.get("dest_state") == expected_state
+            assert len(result.get("targets")) == path.get("size")
             # TODO assert that the file with expected extension exists.
             # cmd_result = hosts.all.shell(cmd="")
     finally:
         hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
 
 
-pytest.mark.parametrize(
+@pytest.mark.parametrize(
     "format", [
         "terse",
         # "xmit",
