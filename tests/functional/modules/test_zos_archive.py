@@ -41,7 +41,6 @@ STATE_INCOMPLETE = 'incomplete'
 USS_FORMATS = ["tar", "zip"]
 
 def set_uss_test_env(ansible_zos_module, test_files):
-    temp_dir = USS_TEMP_DIR
     for key, value in test_files.items():
         ansible_zos_module.all.shell(
             cmd=f"echo \"{value}\" > \"{key}\"",
@@ -64,8 +63,9 @@ def test_uss_archive(ansible_zos_module, format, path):
         hosts.all.file(path=USS_TEMP_DIR, state="directory")
         set_uss_test_env(hosts, USS_TEST_FILES)
         # set test env
+        dest = f"{USS_TEMP_DIR}/archive.{format}"
         archive_result = hosts.all.zos_archive( path=path.get("files"),
-                                        dest=f"{USS_TEMP_DIR}/archive.{format}",
+                                        dest=dest,
                                         format=format)
 
         size = path.get("size")
@@ -77,7 +77,10 @@ def test_uss_archive(ansible_zos_module, format, path):
             assert result.get("dest_state") == expected_state
             assert len(result.get("archived")) == size
             # TODO assert that the file with expected extension exists.
-            # cmd_result = hosts.all.shell(cmd="")
+            cmd_result = hosts.all.shell(cmd=f"ls {USS_TEMP_DIR}")
+            for c_result in cmd_result.contacted.values():
+                assert f"archive.{format}" in c_result.get("stdout")
+                
     finally:
         hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
 
