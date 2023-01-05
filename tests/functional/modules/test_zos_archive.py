@@ -71,6 +71,7 @@ def test_uss_archive(ansible_zos_module, format, path):
                                         dest=dest,
                                         format=format)
 
+        # resulting archived tag varies in size when a folder is archived using zip.
         size = path.get("size")
         if format == "zip" and path.get("files") == f"{USS_TEMP_DIR}/":
             size += 1
@@ -79,7 +80,7 @@ def test_uss_archive(ansible_zos_module, format, path):
             assert result.get("changed") is True
             assert result.get("dest_state") == expected_state
             assert len(result.get("archived")) == size
-            # TODO assert that the file with expected extension exists.
+            # Command to assert the file is in place
             cmd_result = hosts.all.shell(cmd=f"ls {USS_TEMP_DIR}")
             for c_result in cmd_result.contacted.values():
                 assert f"archive.{format}" in c_result.get("stdout")
@@ -95,7 +96,7 @@ def test_uss_archive(ansible_zos_module, format, path):
         ])
 @pytest.mark.parametrize(
     "dataset", [ 
-        #dict(name=TEST_PS, dstype="seq", members=[""]), 
+        dict(name=TEST_PS, dstype="seq", members=[""]), 
         dict(name=TEST_PDS, dstype="pds", members=["MEM1", "MEM2", "MEM3"]),
         dict(name=TEST_PDS, dstype="pdse", members=["MEM1", "MEM2", "MEM3"]),
         ]
@@ -112,16 +113,20 @@ def test_mvs_archive_pds(ansible_zos_module, format, dataset):
             state="present",
         )
         # Create members where needed
-        for member in dataset.get("members"):
-            hosts.all.zos_data_set(
-                name=f"{dataset.get('name')}({member})",
-                type="member",
-                state="present"
-            )
+        if dataset.get("dstype") in ["pds", "pdse"]:
+            for member in dataset.get("members"):
+                hosts.all.zos_data_set(
+                    name=f"{dataset.get('name')}({member})",
+                    type="member",
+                    state="present"
+                )
         # Write some content into it
         test_line = "this is a test line"
         for member in dataset.get("members"):
-            ds_to_write = f"{dataset.get('name')}({member})"
+            if member == "":
+                ds_to_write = f"{dataset.get('name')}"
+            else:
+                ds_to_write = f"{dataset.get('name')}({member})"
             hosts.all.shell(cmd=f"decho '{test_line}' \"{ds_to_write}\"")
         # archive it
         archive_result = hosts.all.zos_archive(
@@ -133,8 +138,6 @@ def test_mvs_archive_pds(ansible_zos_module, format, dataset):
         # assert response are positive 
         for result in archive_result.contacted.values():
             assert result.get("changed") is True
-            # even though archive is succesful we don't get the "failed" key returned.
-            # assert result.get("failed") is False
             # TODO verify that ds exists
             cmd_result = hosts.all.shell(cmd = f"dls {HLQ}.*")
             for c_result in cmd_result.contacted.values():
