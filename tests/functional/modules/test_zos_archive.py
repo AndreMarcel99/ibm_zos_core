@@ -32,6 +32,7 @@ USS_TEST_FILES = {  f"{USS_TEMP_DIR}/foo.txt" : "foo sample content",
 
 TEST_PS = "USER.PRIVATE.TESTDS"
 TEST_PDS = "USER.PRIVATE.TESTPDS"
+HLQ = "USER"
 MVS_DEST_ARCHIVE = "USER.PRIVATE.ARCHIVE"
 
 USS_DEST_ARCHIVE = "testarchive.dzp"
@@ -91,12 +92,15 @@ def test_uss_archive(ansible_zos_module, format, path):
     "format", [
         "terse",
         # "xmit",
-        ],
+        ])
+@pytest.mark.parametrize(
     "dataset", [ 
-        dict(name=TEST_PS, dstype="seq", members=[""]), 
+        #dict(name=TEST_PS, dstype="seq", members=[""]), 
         dict(name=TEST_PDS, dstype="pds", members=["MEM1", "MEM2", "MEM3"]),
-        dict(name=TEST_PDS, dstype="pdse", members=["MEM1", "MEM2", "MEM3"]),]
-def test_mvs_archive(ansible_zos_module, format, dataset):
+        dict(name=TEST_PDS, dstype="pdse", members=["MEM1", "MEM2", "MEM3"]),
+        ]
+)
+def test_mvs_archive_pds(ansible_zos_module, format, dataset):
     try:
         hosts = ansible_zos_module
         # Make sure Dataset is absent
@@ -118,9 +122,9 @@ def test_mvs_archive(ansible_zos_module, format, dataset):
         test_line = "this is a test line"
         for member in dataset.get("members"):
             ds_to_write = f"{dataset.get('name')}({member})"
-            hosts.all.shell(cmd=f"decho {test_line} {ds_to_write}")
+            hosts.all.shell(cmd=f"decho '{test_line}' \"{ds_to_write}\"")
         # archive it
-        archive_result = hosts.all.zos_data_set(
+        archive_result = hosts.all.zos_archive(
             path=dataset.get("name"),
             dest=MVS_DEST_ARCHIVE,
             format=format,
@@ -129,9 +133,12 @@ def test_mvs_archive(ansible_zos_module, format, dataset):
         # assert response are positive 
         for result in archive_result.contacted.values():
             assert result.get("changed") is True
-            assert result.get("failed") is False
-        # assert the resulting DS is in place
+            # even though archive is succesful we don't get the "failed" key returned.
+            # assert result.get("failed") is False
+            # TODO verify that ds exists
+            cmd_result = hosts.all.shell(cmd = f"dls {HLQ}.*")
+            for c_result in cmd_result.contacted.values():
+                assert f"{MVS_DEST_ARCHIVE}" in c_result.get("stdout")
         
     finally:
-        hosts.all.file(path=f"{USS_TEMP_DIR}/{USS_DEST_ARCHIVE}", state="absent")
-        hosts.all.zos_data_set(name=TEST_PS, state="absent")
+        hosts.all.zos_data_set(name=dataset.get("name"), state="absent")
