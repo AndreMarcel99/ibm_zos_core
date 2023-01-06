@@ -29,7 +29,7 @@ USS_TEMP_DIR = "/tmp/archive"
 USS_TEST_FILES = {  f"{USS_TEMP_DIR}/foo.txt" : "foo sample content",
                     f"{USS_TEMP_DIR}/bar.txt": "bar sample content", 
                     f"{USS_TEMP_DIR}/empty.txt":""}
-
+USS_EXCLUSION_FILE = f"{USS_TEMP_DIR}/foo.txt"
 TEST_PS = "USER.PRIVATE.TESTDS"
 TEST_PDS = "USER.PRIVATE.TESTPDS"
 HLQ = "USER"
@@ -53,6 +53,7 @@ def set_uss_test_env(ansible_zos_module, test_files):
 
 # Core functionality tests
 # Test archive with no options
+@pytest.mark.uss
 @pytest.mark.parametrize("format", USS_FORMATS)
 @pytest.mark.parametrize("path", [
     dict(files= f"{USS_TEMP_DIR}/*.txt" , size=len(USS_TEST_FILES)),
@@ -70,6 +71,43 @@ def test_uss_archive(ansible_zos_module, format, path):
         archive_result = hosts.all.zos_archive( path=path.get("files"),
                                         dest=dest,
                                         format=format)
+
+        # resulting archived tag varies in size when a folder is archived using zip.
+        size = path.get("size")
+        if format == "zip" and path.get("files") == f"{USS_TEMP_DIR}/":
+            size += 1
+        
+        for result in archive_result.contacted.values():
+            assert result.get("changed") is True
+            assert result.get("dest_state") == expected_state
+            assert len(result.get("archived")) == size
+            # Command to assert the file is in place
+            cmd_result = hosts.all.shell(cmd=f"ls {USS_TEMP_DIR}")
+            for c_result in cmd_result.contacted.values():
+                assert f"archive.{format}" in c_result.get("stdout")
+                
+    finally:
+        hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
+
+
+@pytest.mark.uss
+@pytest.mark.parametrize("format", USS_FORMATS)
+@pytest.mark.parametrize("path", [
+    dict(files= f"{USS_TEMP_DIR}/*.txt", size=len(USS_TEST_FILES) - 1, exclusion_path=USS_EXCLUSION_FILE),
+    dict(files=list(USS_TEST_FILES.keys()),  size=len(USS_TEST_FILES) - 1, exclusion_path=USS_EXCLUSION_FILE), 
+    dict(files= f"{USS_TEMP_DIR}/" , size=len(USS_TEST_FILES) - 1, exclusion_path=USS_EXCLUSION_FILE), ])
+def test_uss_archive_with_exclusion_list(ansible_zos_module, format, path):
+    try:
+        hosts = ansible_zos_module
+        expected_state = STATE_ARCHIVED if format in ['tar', 'zip'] else STATE_COMPRESSED
+        hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
+        hosts.all.file(path=USS_TEMP_DIR, state="directory")
+        set_uss_test_env(hosts, USS_TEST_FILES)
+        dest = f"{USS_TEMP_DIR}/archive.{format}"
+        archive_result = hosts.all.zos_archive( path=path.get("files"),
+                                        dest=dest,
+                                        format=format,
+                                        exclude_path=path.get("exclusion_path"))
 
         # resulting archived tag varies in size when a folder is archived using zip.
         size = path.get("size")
