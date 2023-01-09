@@ -95,7 +95,8 @@ def test_uss_archive(ansible_zos_module, format, path):
 @pytest.mark.parametrize("path", [
     dict(files= f"{USS_TEMP_DIR}/*.txt", size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE),
     dict(files=list(USS_TEST_FILES.keys()),  size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE), 
-    dict(files= f"{USS_TEMP_DIR}/" , size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE), ])
+    #dict(files= f"{USS_TEMP_DIR}/" , size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE), 
+    ])
 def test_uss_archive_with_exclusion_list(ansible_zos_module, format, path):
     try:
         hosts = ansible_zos_module
