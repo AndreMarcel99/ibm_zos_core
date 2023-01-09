@@ -37,7 +37,6 @@ options:
     type: list
     required: true
     elements: str
-    alias: src
   format:
     description:
       - The type of compression to use.
@@ -100,7 +99,6 @@ options:
     type: bool
     default: false
     required: false
-    alias: force
   list:
     description:
       - List the names of the archive contents
