@@ -186,6 +186,9 @@ from traceback import format_exc
 from zlib import crc32
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.data_set import DataSet
 from fnmatch import fnmatch
+from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.import_handler import (
+    MissingZOAUImport,
+)
 
 try:
     from zoautil_py import datasets, mvscmd, types
@@ -202,7 +205,7 @@ try:
 except ImportError:
     LZMA_IMP_ERR = format_exc()
     HAS_LZMA = False
-        
+
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
@@ -212,11 +215,14 @@ STATE_INCOMPLETE = 'incomplete'
 def _to_bytes(s):
     return to_bytes(s, errors='surrogate_or_strict')
 
+
 def _to_native(s):
     return to_native(s, errors='surrogate_or_strict')
 
+
 def _to_native_ascii(s):
     return to_native(s, errors='surrogate_or_strict', encoding='ascii')
+
 
 def matches_exclusion_patterns(path, exclusion_patterns):
     return any(fnmatch(path, p) for p in exclusion_patterns)
@@ -460,9 +466,10 @@ class Archive(abc.ABC):
             'expanded_paths': [p for p in self.expanded_paths],
             'expanded_exclude_paths': [p for p in self.expanded_exclude_paths],
             # tmp debug variables
-            'tmp_debug' : self.tmp_debug,
-            'targets' : self.targets,
+            'tmp_debug': self.tmp_debug,
+            'targets': self.targets,
         }
+
 
 class TarArchive(Archive):
     def __init__(self, module):
@@ -530,7 +537,8 @@ class TarArchive(Archive):
         return checksums
 
     def _list_targets(self):
-         pass
+        pass
+
 
 class ZipArchive(Archive):
     def __init__(self, module):
@@ -563,7 +571,8 @@ class ZipArchive(Archive):
         return checksums
 
     def _list_targets(self):
-         pass
+        pass
+
 
 class MVSArchive(Archive):
     def __init__(self, module):
@@ -582,20 +591,20 @@ class MVSArchive(Archive):
                 self.targets.append(path)
             else:
                 self.not_found.append(path)
-    
+
     def add_targets(self):
         for target in self.targets:
-                self._add(target, self.destination)
+            self._add(target, self.destination)
 
     def _add(self, path, archive_name):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            rc = datasets.zip( archive_name, path)
+            rc = datasets.zip(archive_name, path)
             if rc != 0:
                 self.module.fail_json(msg="Error creating MVS archive")
             self.successes.append(path)
 
     def _list_targets(self):
-         pass
+        pass
 
     def _get_checksums(self, path):
         pass
@@ -606,12 +615,13 @@ class MVSArchive(Archive):
     def is_different_from_original(self):
         return True
 
+
 class AMATerseArchive(MVSArchive):
     def __init__(self, module):
         super(AMATerseArchive, self).__init__(module)
         # TODO get the pack arg from params
         self.pack_arg = "SPACK"
-    
+
     def prepare_temp_ds(self, tmphlq=""):
         if tmphlq:
             cmd = f"mvstmphelper {tmphlq}.DZIP"
@@ -623,7 +633,7 @@ class AMATerseArchive(MVSArchive):
         rc, stdout, err = self.module.run_command(cmd)
         temp_ds = temp_ds.replace('\n', '')
         return temp_ds
-    
+
     def prepare_terse_ds(self, name):
         cmd = f"dtouch -rfb -tseq -l1024 {name}"
         rc, stdout, err = self.module.run_command(cmd)
@@ -632,13 +642,13 @@ class AMATerseArchive(MVSArchive):
     def dump_into_temp_ds(self, temp_ds):
         """
         Execute ADDRSU command here
-        echo " DUMP OUTDD(ARCHIVE) OPTIMIZE(4) DS(INCL(OMVSADM.ARCHIVE.TEST,)) " 
-        | mvscmdauthhelper --pgm=ADRDSSU --archive=OMVSADM.DZIP.P0000209.T0075822.C0000000,old 
+        echo " DUMP OUTDD(ARCHIVE) OPTIMIZE(4) DS(INCL(OMVSADM.ARCHIVE.TEST,)) "
+        | mvscmdauthhelper --pgm=ADRDSSU --archive=OMVSADM.DZIP.P0000209.T0075822.C0000000,old
         --sysin=stdin --sysprint=*
         """
         dump_cmd = f""" DUMP OUTDDNAME(TARGET) -
          OPTIMIZE(4) DS(INCL( - """
-        
+
         for target in self.targets:
             dump_cmd += f"\n {target}, - "
         dump_cmd += '\n ) '
@@ -646,11 +656,11 @@ class AMATerseArchive(MVSArchive):
         # dump_cmd += '- \n ) TOL( ENQF IOER ) '
 
         dump_cmd += ' )'
-        
+
         cmd = f" mvscmdauth --pgm=ADRDSSU --TARGET={temp_ds},old --sysin=stdin --sysprint=*"
         rc, out, err = self.module.run_command(cmd, data=dump_cmd)
-        
-        if rc != 0: 
+
+        if rc != 0:
             self.module.fail_json(
                 msg=f"Failed executing ADRDSSU to archive {temp_ds}",
                 stdout=out,
@@ -662,7 +672,7 @@ class AMATerseArchive(MVSArchive):
 
     def _add(self, path, archive_name):
         """ Execute AMATARSE command here
-        mvscmdhelper --pgm=AMATERSE --args='SPACK' --sysut1=OMVSADM.DZIP.P0000209.T0075822.C0000000 
+        mvscmdhelper --pgm=AMATERSE --args='SPACK' --sysut1=OMVSADM.DZIP.P0000209.T0075822.C0000000
         --sysut2=OMVSADM.DZIP.P0000209.T0075822.C0000000.TRS --sysprint=*
         """
         cmd = f"mvscmdhelper --pgm=AMATERSE --args='{self.pack_arg}' --sysut1={path} --sysut2={archive_name} --sysprint=*"
@@ -688,16 +698,16 @@ class AMATerseArchive(MVSArchive):
             rc = self.dump_into_temp_ds(temp_ds)
             # Uncomment in case of using only one dataset
             # rc = 0
-            
+
             if rc != 0:
                 # TODO
-                None 
+                None
                 # module.fail_json
-        
+
             rc = self._add(temp_ds, terse_ds)
-        finally: 
+        finally:
             datasets.delete(temp_ds)
-        
+
 
 def run_module():
     module = AnsibleModule(
@@ -762,7 +772,7 @@ def run_module():
     # Find the targets
     archive.find_targets()
     if archive.has_targets():
-        #if archive.must_archive:
+        # if archive.must_archive:
         archive.add_targets()
         archive.destination_state = STATE_INCOMPLETE if archive.has_unfound_targets() else STATE_ARCHIVED
         archive.changed = archive.is_different_from_original()
