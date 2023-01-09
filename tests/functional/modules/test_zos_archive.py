@@ -93,21 +93,21 @@ def test_uss_archive(ansible_zos_module, format, path):
 @pytest.mark.uss
 @pytest.mark.parametrize("format", USS_FORMATS)
 @pytest.mark.parametrize("path", [
-    dict(files= f"{USS_TEMP_DIR}/*.txt", size=len(USS_TEST_FILES) - 1, exclusion_path=USS_EXCLUSION_FILE),
-    dict(files=list(USS_TEST_FILES.keys()),  size=len(USS_TEST_FILES) - 1, exclusion_path=USS_EXCLUSION_FILE), 
-    dict(files= f"{USS_TEMP_DIR}/" , size=len(USS_TEST_FILES) - 1, exclusion_path=USS_EXCLUSION_FILE), ])
+    dict(files= f"{USS_TEMP_DIR}/*.txt", size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE),
+    dict(files=list(USS_TEST_FILES.keys()),  size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE), 
+    dict(files= f"{USS_TEMP_DIR}/" , size=len(USS_TEST_FILES) - 1, exclude_path=USS_EXCLUSION_FILE), ])
 def test_uss_archive_with_exclusion_list(ansible_zos_module, format, path):
     try:
         hosts = ansible_zos_module
         expected_state = STATE_ARCHIVED if format in ['tar', 'zip'] else STATE_COMPRESSED
-        hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
+        hosts.all.file(path=USS_TEMP_DIR, state="absent")
         hosts.all.file(path=USS_TEMP_DIR, state="directory")
         set_uss_test_env(hosts, USS_TEST_FILES)
         dest = f"{USS_TEMP_DIR}/archive.{format}"
         archive_result = hosts.all.zos_archive( path=path.get("files"),
                                         dest=dest,
                                         format=format,
-                                        exclude_path=path.get("exclusion_path"))
+                                        exclude_path=path.get("exclude_path"))
 
         # resulting archived tag varies in size when a folder is archived using zip.
         size = path.get("size")
@@ -124,7 +124,7 @@ def test_uss_archive_with_exclusion_list(ansible_zos_module, format, path):
                 assert f"archive.{format}" in c_result.get("stdout")
                 
     finally:
-        hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
+        hosts.all.file(path=USS_TEMP_DIR, state="absent")
 
 
 @pytest.mark.parametrize(
