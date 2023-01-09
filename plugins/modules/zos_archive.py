@@ -36,13 +36,13 @@ options:
       - Remote absolute path, glob, or list of paths or globs for the file or files to compress or archive.
     type: list
     required: true
-    elements: path
+    elements: str
     alias: src
   format:
     description:
       - The type of compression to use.
     type: str
-    choices: [ bz2, gz, tar, zip ]
+    choices: [ bz2, gz, tar, zip, terse]
     default: gz
     required: false
   dest:
@@ -55,7 +55,7 @@ options:
            from path list and glob expansion.
     type: list
     required: false
-    elements: path
+    elements: str
   force_archive:
     description:
       - Allows you to force the module to treat this as an archive even if only a single file is specified.
@@ -86,7 +86,7 @@ options:
       - Glob style patterns to exclude files or directories from the resulting archive.
       - This differs from I(exclude_path) which applies only to the source paths from I(path).
     type: list
-    elements: path
+    elements: str
     required: false
   remove:
     description:
@@ -712,7 +712,7 @@ class AMATerseArchive(MVSArchive):
 def run_module():
     module = AnsibleModule(
         argument_spec=dict(
-            path=dict(type='list', elements='str', required=True, alias='src'),
+            path=dict(type='list', elements='str', required=True),
             dest=dict(type='str'),
             exclude_path=dict(type='list', elements='str', default=[]),
             # Q1 I think we should use force in here instead of down, and change that one to replace.
@@ -724,7 +724,7 @@ def run_module():
             remove=dict(type='bool', default=False),
             exclusion_patterns=dict(type='list', elements='str'),
             # Q1 I think this parameter name should be replace.
-            replace_dest=dict(type='bool', default=False, alias='force'),
+            replace_dest=dict(type='bool', default=False),
             list=dict(type='bool', default=False),
             tmp_hlq=dict(type='str', default=''),
         ),
