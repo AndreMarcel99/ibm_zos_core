@@ -42,7 +42,7 @@ STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
 STATE_INCOMPLETE = 'incomplete'
 
-USS_FORMATS = ["tar", "zip"]
+USS_FORMATS = ['tar', 'zip', 'gz']
 
 def set_uss_test_env(ansible_zos_module, test_files):
     for key, value in test_files.items():
@@ -63,7 +63,7 @@ def set_uss_test_env(ansible_zos_module, test_files):
 def test_uss_archive(ansible_zos_module, format, path):
     try:
         hosts = ansible_zos_module
-        expected_state = STATE_ARCHIVED if format in ['tar', 'zip'] else STATE_COMPRESSED
+        expected_state = STATE_ARCHIVED
         hosts.all.file(path=f"{USS_TEMP_DIR}", state="absent")
         hosts.all.file(path=USS_TEMP_DIR, state="directory")
         set_uss_test_env(hosts, USS_TEST_FILES)
@@ -74,7 +74,7 @@ def test_uss_archive(ansible_zos_module, format, path):
 
         # resulting archived tag varies in size when a folder is archived using zip.
         size = path.get("size")
-        if format == "zip" and path.get("files") == f"{USS_TEMP_DIR}/":
+        if format in ['zip', 'gz'] and path.get("files") == f"{USS_TEMP_DIR}/":
             size += 1
         
         for result in archive_result.contacted.values():
