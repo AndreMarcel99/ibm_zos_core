@@ -242,7 +242,7 @@ def get_archive(module):
     which archive handler to use.
     """
     format = module.params.get("format")
-    if format in ["tar"]:
+    if format in ["tar", "gz"]:
         return TarArchive(module)
     elif format in ["terse", "xmit"]:
         return AMATerseArchive(module)
