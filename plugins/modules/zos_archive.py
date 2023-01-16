@@ -222,11 +222,11 @@ def _to_native_ascii(s):
     return to_native(s, errors='surrogate_or_strict', encoding='ascii')
 
 
-def matches_exclusion_patterns(path, exclusion_patterns):
+def matches_exclusion_patterns(path : str, exclusion_patterns : str):
     return any(fnmatch(path, p) for p in exclusion_patterns)
 
 
-def get_archive(module):
+def get_archive(module : AnsibleModule):
     """
     Return the proper archive handler based on archive format.
     Arguments:
@@ -236,7 +236,6 @@ def get_archive(module):
 
 
     """
-
     """
     TODO Come up with rules to decide based on src, dest and format
     which archive handler to use.
@@ -635,7 +634,7 @@ class AMATerseArchive(MVSArchive):
     def prepare_terse_ds(self, name):
         cmd = f"dtouch -rfb -tseq -l1024 {name}"
         rc, out, err = self.module.run_command(cmd)
-        
+
         if rc != 0:
             self.module.fail_json(
                 msg=f"Failed preparing {name} to be used as an archive",
