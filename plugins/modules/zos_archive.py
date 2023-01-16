@@ -634,15 +634,21 @@ class AMATerseArchive(MVSArchive):
 
     def prepare_terse_ds(self, name):
         cmd = f"dtouch -rfb -tseq -l1024 {name}"
-        rc, stdout, err = self.module.run_command(cmd)
+        rc, out, err = self.module.run_command(cmd)
+        
+        if rc != 0:
+            self.module.fail_json(
+                msg=f"Failed preparing {name} to be used as an archive",
+                stdout=out,
+                stderr=err,
+                stdout_lines=cmd,
+                rc=rc,
+            )
         return name
 
     def dump_into_temp_ds(self, temp_ds):
         """
-        Execute ADDRSU command here
-        echo " DUMP OUTDD(ARCHIVE) OPTIMIZE(4) DS(INCL(OMVSADM.ARCHIVE.TEST,)) "
-        | mvscmdauthhelper --pgm=ADRDSSU --archive=OMVSADM.DZIP.P0000209.T0075822.C0000000,old
-        --sysin=stdin --sysprint=*
+        Dump src datasets identified as self.targets into a temporary dataset using ADRDSSU.
         """
         dump_cmd = f""" DUMP OUTDDNAME(TARGET) -
          OPTIMIZE(4) DS(INCL( - """
