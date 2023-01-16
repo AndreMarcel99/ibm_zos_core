@@ -668,16 +668,15 @@ class AMATerseArchive(MVSArchive):
             )
         return rc
 
-    def _add(self, path, archive_name):
-        """ Execute AMATARSE command here
-        mvscmdhelper --pgm=AMATERSE --args='SPACK' --sysut1=OMVSADM.DZIP.P0000209.T0075822.C0000000
-        --sysut2=OMVSADM.DZIP.P0000209.T0075822.C0000000.TRS --sysprint=*
+    def _add(self, path, archive):
+        """ 
+        Archive path into archive using AMATERSE program.
         """
-        cmd = f"mvscmdhelper --pgm=AMATERSE --args='{self.pack_arg}' --sysut1={path} --sysut2={archive_name} --sysprint=*"
+        cmd = f"mvscmdhelper --pgm=AMATERSE --args='{self.pack_arg}' --sysut1={path} --sysut2={archive} --sysprint=*"
         rc, out, err = self.module.run_command(cmd)
         if rc != 0:
             self.module.fail_json(
-                msg=f"Failed executing AMATERSE to archive {path} into {archive_name}",
+                msg=f"Failed executing AMATERSE to archive {path} into {archive}",
                 stdout=out,
                 stderr=err,
                 rc=rc,
@@ -686,22 +685,13 @@ class AMATerseArchive(MVSArchive):
         return rc
 
     def add_targets(self):
-        # comment in case of using only one dataset
+        """ 
+        Adds MVS Datasets to the AMATERSE Archive by creating a temporary dataset and dumping the source datasets into it.
+        """
         temp_ds = self.prepare_temp_ds()
-        # Uncomment in case of using only one dataset
-        # temp_ds = self.targets[0]
         try:
             terse_ds = self.prepare_terse_ds(self.destination)
-            # comment in case of using only one dataset
             rc = self.dump_into_temp_ds(temp_ds)
-            # Uncomment in case of using only one dataset
-            # rc = 0
-
-            if rc != 0:
-                # TODO
-                None
-                # module.fail_json
-
             rc = self._add(temp_ds, terse_ds)
         finally:
             datasets.delete(temp_ds)
