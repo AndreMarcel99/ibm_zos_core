@@ -222,11 +222,11 @@ def _to_native_ascii(s):
     return to_native(s, errors='surrogate_or_strict', encoding='ascii')
 
 
-def matches_exclusion_patterns(path : str, exclusion_patterns : str):
+def matches_exclusion_patterns(path: str, exclusion_patterns: str):
     return any(fnmatch(path, p) for p in exclusion_patterns)
 
 
-def get_archive(module : AnsibleModule):
+def get_archive(module: AnsibleModule):
     """
     Return the proper archive handler based on archive format.
     Arguments:
@@ -674,7 +674,7 @@ class AMATerseArchive(MVSArchive):
         return rc
 
     def _add(self, path, archive):
-        """ 
+        """
         Archive path into archive using AMATERSE program.
         """
         cmd = f"mvscmdhelper --pgm=AMATERSE --args='{self.pack_arg}' --sysut1={path} --sysut2={archive} --sysprint=*"
@@ -690,7 +690,7 @@ class AMATerseArchive(MVSArchive):
         return rc
 
     def add_targets(self):
-        """ 
+        """
         Adds MVS Datasets to the AMATERSE Archive by creating a temporary dataset and dumping the source datasets into it.
         """
         temp_ds = self.prepare_temp_ds()
