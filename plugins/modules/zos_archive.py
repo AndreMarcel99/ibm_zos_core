@@ -614,12 +614,12 @@ class MVSArchive(Archive):
 
 
 class AMATerseArchive(MVSArchive):
-    def __init__(self, module):
+    def __init__(self, module: AnsibleModule):
         super(AMATerseArchive, self).__init__(module)
         # TODO get the pack arg from params
         self.pack_arg = "SPACK"
 
-    def prepare_temp_ds(self, tmphlq=""):
+    def prepare_temp_ds(self, tmphlq: str=""):
         if tmphlq:
             cmd = f"mvstmphelper {tmphlq}.DZIP"
         else:
@@ -631,7 +631,7 @@ class AMATerseArchive(MVSArchive):
         temp_ds = temp_ds.replace('\n', '')
         return temp_ds
 
-    def prepare_terse_ds(self, name):
+    def prepare_terse_ds(self, name: str):
         cmd = f"dtouch -rfb -tseq -l1024 {name}"
         rc, out, err = self.module.run_command(cmd)
 
@@ -645,7 +645,7 @@ class AMATerseArchive(MVSArchive):
             )
         return name
 
-    def dump_into_temp_ds(self, temp_ds):
+    def dump_into_temp_ds(self, temp_ds: str):
         """
         Dump src datasets identified as self.targets into a temporary dataset using ADRDSSU.
         """
@@ -673,7 +673,7 @@ class AMATerseArchive(MVSArchive):
             )
         return rc
 
-    def _add(self, path, archive):
+    def _add(self, path: str, archive: str):
         """
         Archive path into archive using AMATERSE program.
         """
