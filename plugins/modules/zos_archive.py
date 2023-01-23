@@ -244,7 +244,7 @@ def get_archive(module: AnsibleModule):
     which archive handler to use.
     """
     format = module.params.get("format")
-    if format in ["tar", "gz"]:
+    if format in ["tar", "gz", "bz2"]:
         return TarArchive(module)
     elif format in ["terse", "xmit"]:
         return AMATerseArchive(module)
