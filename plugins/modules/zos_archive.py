@@ -621,23 +621,23 @@ class AMATerseArchive(MVSArchive):
 
     def prepare_temp_ds(self, tmphlq: str=""):
         if tmphlq:
-            cmd = f"mvstmphelper {tmphlq}.DZIP"
+            cmd = "mvstmphelper {0}.DZIP".format(tmphlq)
         else:
             # TODO add hlq fetch
-            cmd = f"mvstmphelper OMVSADM.DZIP"
+            cmd = "mvstmphelper OMVSADM.DZIP"
         rc, temp_ds, err = self.module.run_command(cmd)
-        cmd = f"dtouch -ru -tseq {temp_ds}"
+        cmd = "dtouch -ru -tseq {0}".format(temp_ds)
         rc, stdout, err = self.module.run_command(cmd)
         temp_ds = temp_ds.replace('\n', '')
         return temp_ds
 
     def prepare_terse_ds(self, name: str):
-        cmd = f"dtouch -rfb -tseq -l1024 {name}"
+        cmd = "dtouch -rfb -tseq -l1024 {0}".format(name)
         rc, out, err = self.module.run_command(cmd)
 
         if rc != 0:
             self.module.fail_json(
-                msg=f"Failed preparing {name} to be used as an archive",
+                msg="Failed preparing {0} to be used as an archive".format(name),
                 stdout=out,
                 stderr=err,
                 stdout_lines=cmd,
@@ -649,23 +649,23 @@ class AMATerseArchive(MVSArchive):
         """
         Dump src datasets identified as self.targets into a temporary dataset using ADRDSSU.
         """
-        dump_cmd = f""" DUMP OUTDDNAME(TARGET) -
+        dump_cmd = """ DUMP OUTDDNAME(TARGET) -
          OPTIMIZE(4) DS(INCL( - """
 
         for target in self.targets:
-            dump_cmd += f"\n {target}, - "
+            dump_cmd += "\n {0}, - ".format(target)
         dump_cmd += '\n ) '
 
         # dump_cmd += '- \n ) TOL( ENQF IOER ) '
 
         dump_cmd += ' )'
 
-        cmd = f" mvscmdauth --pgm=ADRDSSU --TARGET={temp_ds},old --sysin=stdin --sysprint=*"
+        cmd = " mvscmdauth --pgm=ADRDSSU --TARGET={0},old --sysin=stdin --sysprint=*".format(temp_ds)
         rc, out, err = self.module.run_command(cmd, data=dump_cmd)
 
         if rc != 0:
             self.module.fail_json(
-                msg=f"Failed executing ADRDSSU to archive {temp_ds}",
+                msg="Failed executing ADRDSSU to archive {0}".format(temp_ds),
                 stdout=out,
                 stderr=err,
                 stdout_lines=dump_cmd,
@@ -677,11 +677,11 @@ class AMATerseArchive(MVSArchive):
         """
         Archive path into archive using AMATERSE program.
         """
-        cmd = f"mvscmdhelper --pgm=AMATERSE --args='{self.pack_arg}' --sysut1={path} --sysut2={archive} --sysprint=*"
+        cmd = "mvscmdhelper --pgm=AMATERSE --args='{0}' --sysut1={1} --sysut2={2} --sysprint=*".format(self.pack_arg, path, archive)
         rc, out, err = self.module.run_command(cmd)
         if rc != 0:
             self.module.fail_json(
-                msg=f"Failed executing AMATERSE to archive {path} into {archive}",
+                msg="Failed executing AMATERSE to archive {0} into {1}".format(path, archive),
                 stdout=out,
                 stderr=err,
                 rc=rc,
