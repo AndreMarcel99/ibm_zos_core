@@ -174,6 +174,8 @@ from ansible_collections.ibm.ibm_zos_core.plugins.module_utils import (
     data_set)
 from ansible.module_utils.common.text.converters import to_bytes, to_native
 import glob
+import bz2
+from sys import version_info
 import re
 import os
 import abc
@@ -204,6 +206,7 @@ except ImportError:
     LZMA_IMP_ERR = format_exc()
     HAS_LZMA = False
 
+PY27 = version_info[0:2] >= (2, 7)
 STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
@@ -504,7 +507,13 @@ class TarArchive(Archive):
         def py27_filter(tarinfo):
             return None if matches_exclusion_patterns(tarinfo.name, self.exclusion_patterns) else tarinfo
 
-        self.file.add(path, archive_name, recursive=False, filter=py27_filter)
+        def py26_filter(path):
+            return matches_exclusion_patterns(path, self.exclusion_patterns)
+
+        if PY27:
+            self.file.add(path, archive_name, recursive=False, filter=py27_filter)
+        else:
+            self.file.add(path, archive_name, recursive=False, exclude=py26_filter)
 
     def _get_checksums(self, path):
         if HAS_LZMA:
