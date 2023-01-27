@@ -211,6 +211,8 @@ STATE_ABSENT = 'absent'
 STATE_ARCHIVED = 'archive'
 STATE_COMPRESSED = 'compress'
 STATE_INCOMPLETE = 'incomplete'
+XMIT_RECORD_LENGTH = 80
+AMATERSE_RECORD_LENGTH = 1024
 
 
 def _to_bytes(s):
@@ -598,36 +600,6 @@ class MVSArchive(Archive):
             else:
                 self.not_found.append(path)
 
-    def add_targets(self):
-        for target in self.targets:
-            self._add(target, self.destination)
-
-    def _add(self, path, archive_name):
-        if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            rc = datasets.zip(archive_name, path)
-            if rc != 0:
-                self.module.fail_json(msg="Error creating MVS archive")
-            self.successes.append(path)
-
-    def _list_targets(self):
-        pass
-
-    def _get_checksums(self, path):
-        pass
-
-    def contains(self):
-        pass
-
-    def is_different_from_original(self):
-        return True
-
-
-class AMATerseArchive(MVSArchive):
-    def __init__(self, module: AnsibleModule):
-        super(AMATerseArchive, self).__init__(module)
-        # TODO get the pack arg from params
-        self.pack_arg = "SPACK"
-
     def prepare_temp_ds(self, tmphlq: str=""):
         if tmphlq:
             cmd = "mvstmphelper {0}.DZIP".format(tmphlq)
@@ -641,7 +613,8 @@ class AMATerseArchive(MVSArchive):
         return temp_ds
 
     def prepare_terse_ds(self, name: str):
-        cmd = "dtouch -rfb -tseq -l1024 {0}".format(name)
+        record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "XMIT" else AMATERSE_RECORD_LENGTH
+        cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
         rc, out, err = self.module.run_command(cmd)
 
         if rc != 0:
@@ -681,6 +654,36 @@ class AMATerseArchive(MVSArchive):
                 rc=rc,
             )
         return rc
+
+    def add_targets(self):
+        for target in self.targets:
+            self._add(target, self.destination)
+
+    def _add(self, path, archive_name):
+        if not matches_exclusion_patterns(path, self.exclusion_patterns):
+            rc = datasets.zip(archive_name, path)
+            if rc != 0:
+                self.module.fail_json(msg="Error creating MVS archive")
+            self.successes.append(path)
+
+    def _list_targets(self):
+        pass
+
+    def _get_checksums(self, path):
+        pass
+
+    def contains(self):
+        pass
+
+    def is_different_from_original(self):
+        return True
+
+
+class AMATerseArchive(MVSArchive):
+    def __init__(self, module: AnsibleModule):
+        super(AMATerseArchive, self).__init__(module)
+        # TODO get the pack arg from params
+        self.pack_arg = "SPACK"
 
     def _add(self, path: str, archive: str):
         """
