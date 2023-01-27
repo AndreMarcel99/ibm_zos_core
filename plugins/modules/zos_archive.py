@@ -248,8 +248,10 @@ def get_archive(module: AnsibleModule):
     format = module.params.get("format")
     if format in ["tar", "gz", "bz2"]:
         return TarArchive(module)
-    elif format in ["terse", "xmit"]:
+    elif format == "terse":
         return AMATerseArchive(module)
+    elif format == "xmit":
+        return XMITArchive(module)
     return ZipArchive(module)
 
 
@@ -613,7 +615,7 @@ class MVSArchive(Archive):
         return temp_ds
 
     def prepare_terse_ds(self, name: str):
-        record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "XMIT" else AMATERSE_RECORD_LENGTH
+        record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "xmit" else AMATERSE_RECORD_LENGTH
         cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
         rc, out, err = self.module.run_command(cmd)
 
@@ -713,6 +715,38 @@ class AMATerseArchive(MVSArchive):
         finally:
             datasets.delete(temp_ds)
 
+class XMITArchive(MVSArchive):
+    def __init__(self, module: AnsibleModule):
+        super(XMITArchive, self).__init__(module)
+
+    def _add(self, path: str, archive: str):
+        """
+        Archive path into archive using TSO XMIT.
+        """
+        tso_cmd = " tsocmd XMIT A.B DSN\\( \\'{0}\\' \\) OUTDSN\\( \\'{1}\\' \\)".format( path, archive)
+        rc, out, err = self.module.run_command(tso_cmd)
+        if rc != 0:
+            self.module.fail_json(
+                msg="Failed executing TSO XMIT to archive {0} into {1}".format(path, archive),
+                stdout=out,
+                stderr=err,
+                rc=rc,
+            )
+        self.successes = self.targets[:]
+        return rc
+
+    def add_targets(self):
+        """
+        Adds MVS Datasets to the TSO XMIT Archive by creating a temporary dataset and dumping the source datasets into it.
+        """
+        temp_ds = self.prepare_temp_ds()
+        try:
+            terse_ds = self.prepare_terse_ds(self.destination)
+            rc = self.dump_into_temp_ds(temp_ds)
+            rc = self._add(temp_ds, terse_ds)
+        finally:
+            datasets.delete(temp_ds)
+
 
 def run_module():
     module = AnsibleModule(
@@ -722,7 +756,7 @@ def run_module():
             exclude_path=dict(type='list', elements='str', default=[]),
             # Q1 I think we should use force in here instead of down, and change that one to replace.
             force_archive=dict(type='bool', default=False),
-            format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse']),
+            format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']),
             group=dict(type='str', default=''),
             mode=dict(type='str', default=''),
             owner=dict(type='str', default=''),
@@ -742,7 +776,7 @@ def run_module():
         exclude_path=dict(type='list', elements='str', default=[]),
         # Q1 I think we should use force in here instead of down, and change that one to replace.
         force_archive=dict(type='bool', default=False),
-        format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse']),
+        format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']),
         group=dict(type='str', default=''),
         mode=dict(type='str', default=''),
         owner=dict(type='str', default=''),
