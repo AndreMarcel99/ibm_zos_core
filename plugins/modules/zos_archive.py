@@ -602,6 +602,9 @@ class MVSArchive(Archive):
         pass
 
     def find_targets(self):
+        """
+        Based on path, find existing targets.
+        """
         for path in self.paths:
             if DataSet.data_set_exists(path):
                 self.targets.append(path)
@@ -609,18 +612,28 @@ class MVSArchive(Archive):
                 self.not_found.append(path)
 
     def prepare_temp_ds(self, tmphlq):
+        """
+        Creates a temporary sequential dataset.
+        Arguments:
+            tmphlq: {str}
+        """
         if tmphlq:
             hlq = tmphlq
         else:
             rc, hlq, err = self.module.run_command("hlq")
         cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
-        cmd = "dtouch -ru -tseq {0}".format(temp_ds)
-        rc, stdout, err = self.module.run_command(cmd)
-        temp_ds = temp_ds.replace('\n', '')
+        # cmd = "dtouch -ru -tseq {0}".format(temp_ds)
+        # rc, stdout, err = self.module.run_command(cmd)
+        # temp_ds = temp_ds.replace('\n', '')
+        # TODO replace False when we check for existing dest
+        changed = DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
         return temp_ds
 
-    def prepare_terse_ds(self, name):
+    def prepare_dump_ds(self, name):
+        """
+        Create
+        """
         record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "xmit" else AMATERSE_RECORD_LENGTH
         cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
         rc, out, err = self.module.run_command(cmd)
@@ -718,7 +731,7 @@ class AMATerseArchive(MVSArchive):
         """
         temp_ds = self.prepare_temp_ds()
         try:
-            terse_ds = self.prepare_terse_ds(self.destination)
+            terse_ds = self.prepare_dump_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
             rc = self._add(temp_ds, terse_ds)
         finally:
@@ -753,7 +766,7 @@ class XMITArchive(MVSArchive):
         """
         temp_ds = self.prepare_temp_ds()
         try:
-            terse_ds = self.prepare_terse_ds(self.destination)
+            terse_ds = self.prepare_dump_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
             rc = self._add(temp_ds, terse_ds)
         finally:
