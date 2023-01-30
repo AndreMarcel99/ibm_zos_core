@@ -604,10 +604,11 @@ class MVSArchive(Archive):
 
     def prepare_temp_ds(self, tmphlq: str=""):
         if tmphlq:
-            cmd = "mvstmphelper {0}.DZIP".format(tmphlq)
+            hlq = tmphlq
         else:
             # TODO add hlq fetch
-            cmd = "mvstmphelper OMVSADM.DZIP"
+            rc, hlq, err = self.module.run_command("hlq")
+        cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
         cmd = "dtouch -ru -tseq {0}".format(temp_ds)
         rc, stdout, err = self.module.run_command(cmd)
