@@ -602,7 +602,7 @@ class MVSArchive(Archive):
             else:
                 self.not_found.append(path)
 
-    def prepare_temp_ds(self, tmphlq: str=""):
+    def prepare_temp_ds(self, tmphlq):
         if tmphlq:
             hlq = tmphlq
         else:
@@ -614,7 +614,7 @@ class MVSArchive(Archive):
         temp_ds = temp_ds.replace('\n', '')
         return temp_ds
 
-    def prepare_terse_ds(self, name: str):
+    def prepare_terse_ds(self, name):
         record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "xmit" else AMATERSE_RECORD_LENGTH
         cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
         rc, out, err = self.module.run_command(cmd)
@@ -629,7 +629,7 @@ class MVSArchive(Archive):
             )
         return name
 
-    def dump_into_temp_ds(self, temp_ds: str):
+    def dump_into_temp_ds(self, temp_ds):
         """
         Dump src datasets identified as self.targets into a temporary dataset using ADRDSSU.
         """
