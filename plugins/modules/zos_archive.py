@@ -688,14 +688,17 @@ class MVSArchive(Archive):
 
 
 class AMATerseArchive(MVSArchive):
-    def __init__(self, module: AnsibleModule):
+    def __init__(self, module):
         super(AMATerseArchive, self).__init__(module)
         # TODO get the pack arg from params
         self.pack_arg = "SPACK"
 
-    def _add(self, path: str, archive: str):
+    def _add(self, path, archive):
         """
         Archive path into archive using AMATERSE program.
+        Arguments:
+            path: {str}
+            archive: {str}
         """
         cmd = "mvscmdhelper --pgm=AMATERSE --args='{0}' --sysut1={1} --sysut2={2} --sysprint=*".format(self.pack_arg, path, archive)
         rc, out, err = self.module.run_command(cmd)
@@ -711,7 +714,7 @@ class AMATerseArchive(MVSArchive):
 
     def add_targets(self):
         """
-        Adds MVS Datasets to the AMATERSE Archive by creating a temporary dataset and dumping the source datasets into it.
+        Add MVS Datasets to the AMATERSE Archive by creating a temporary dataset and dumping the source datasets into it.
         """
         temp_ds = self.prepare_temp_ds()
         try:
@@ -722,12 +725,15 @@ class AMATerseArchive(MVSArchive):
             datasets.delete(temp_ds)
 
 class XMITArchive(MVSArchive):
-    def __init__(self, module: AnsibleModule):
+    def __init__(self, module):
         super(XMITArchive, self).__init__(module)
 
-    def _add(self, path: str, archive: str):
+    def _add(self, path, archive):
         """
         Archive path into archive using TSO XMIT.
+        Arguments:
+            path: {str}
+            archive: {str}
         """
         tso_cmd = " tsocmd XMIT A.B DSN\\( \\'{0}\\' \\) OUTDSN\\( \\'{1}\\' \\)".format( path, archive)
         rc, out, err = self.module.run_command(tso_cmd)
