@@ -425,7 +425,7 @@ class Archive(abc.ABC):
                 dest=self.destination, msg='Error deleting some source files: ', files=self.errors
             )
 
-    def is_archive(path):
+    def is_archive(self, path):
         return re.search(br'\.(tar|tar\.(gz|bz2|xz)|tgz|tbz2|zip)$', os.path.basename(path), re.IGNORECASE)
 
     def has_targets(self):
@@ -461,17 +461,17 @@ class Archive(abc.ABC):
     @property
     def result(self):
         return {
-            'archived': [p for p in self.successes],
+            'archived': self.successes,
             'dest': self.destination,
             'dest_state': self.destination_state,
             'changed': self.changed,
             'arcroot': self.root,
-            'missing': [p for p in self.not_found],
-            'expanded_paths': [p for p in self.expanded_paths],
-            'expanded_exclude_paths': [p for p in self.expanded_exclude_paths],
+            'missing': self.not_found,
+            'expanded_paths': list(self.expanded_paths),
+            'expanded_exclude_paths': list(self.expanded_exclude_paths),
             # tmp debug variables
-            'tmp_debug': self.tmp_debug,
-            'targets': self.targets,
+            # 'tmp_debug': self.tmp_debug,
+            # 'targets': self.targets,
         }
 
 
@@ -606,7 +606,6 @@ class MVSArchive(Archive):
         if tmphlq:
             hlq = tmphlq
         else:
-            # TODO add hlq fetch
             rc, hlq, err = self.module.run_command("hlq")
         cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
