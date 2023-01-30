@@ -300,7 +300,7 @@ class Archive(abc.ABC):
 
         paths = module.params['path']
 
-        if self.format == 'terse':
+        if self.format in ("terse", "xmit"):
             self.paths = paths
             self.expanded_paths, self.has_globs = "", ""
             self.expanded_exclude_paths = ""
