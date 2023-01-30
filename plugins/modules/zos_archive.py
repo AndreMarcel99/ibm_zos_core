@@ -325,10 +325,10 @@ class Archive(abc.ABC):
         self.original_checksums = self.destination_checksums()
         self.original_size = self.destination_size()
 
-    def add(self, path, archive_name):
+    def add(self, path, archive):
         try:
-            self._add(_to_native_ascii(path), _to_native(archive_name))
-            if self.contains(_to_native(archive_name)):
+            self._add(_to_native_ascii(path), _to_native(archive))
+            if self.contains(_to_native(archive)):
                 self.successes.append(path)
         except Exception as e:
             self.errors.append('%s: %s' % (_to_native_ascii(path), _to_native(e)))
@@ -447,7 +447,7 @@ class Archive(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def _add(self, path, archive_name):
+    def _add(self, path, archive):
         pass
 
     @abc.abstractmethod
@@ -507,7 +507,7 @@ class TarArchive(Archive):
         else:
             self.module.fail_json(msg="%s is not a valid archive format" % self.format)
 
-    def _add(self, path, archive_name):
+    def _add(self, path, archive):
         def py27_filter(tarinfo):
             return None if matches_exclusion_patterns(tarinfo.name, self.exclusion_patterns) else tarinfo
 
@@ -515,9 +515,9 @@ class TarArchive(Archive):
             return matches_exclusion_patterns(path, self.exclusion_patterns)
 
         if PY27:
-            self.file.add(path, archive_name, recursive=False, filter=py27_filter)
+            self.file.add(path, archive, recursive=False, filter=py27_filter)
         else:
-            self.file.add(path, archive_name, recursive=False, exclude=py26_filter)
+            self.file.add(path, archive, recursive=False, exclude=py26_filter)
 
     def _get_checksums(self, path):
         if HAS_LZMA:
@@ -560,9 +560,9 @@ class ZipArchive(Archive):
     def close(self):
         self.file.close()
 
-    def _add(self, path, archive_name):
+    def _add(self, path, archive):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            self.file.write(_to_bytes(path), archive_name)
+            self.file.write(_to_bytes(path), archive)
 
     def contains(self, name):
         try:
@@ -661,9 +661,9 @@ class MVSArchive(Archive):
         for target in self.targets:
             self._add(target, self.destination)
 
-    def _add(self, path, archive_name):
+    def _add(self, path, archive):
         if not matches_exclusion_patterns(path, self.exclusion_patterns):
-            rc = datasets.zip(archive_name, path)
+            rc = datasets.zip(archive, path)
             if rc != 0:
                 self.module.fail_json(msg="Error creating MVS archive")
             self.successes.append(path)
