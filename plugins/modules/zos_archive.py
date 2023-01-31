@@ -245,7 +245,7 @@ def get_archive(module: AnsibleModule):
     TODO Come up with rules to decide based on src, dest and format
     which archive handler to use.
     """
-    format = module.params.get("format")
+    format = module.params.get("format").get("compression")
     if format in ["tar", "gz", "bz2"]:
         return TarArchive(module)
     elif format == "terse":
@@ -286,7 +286,7 @@ class Archive(abc.ABC):
         self.module = module
         self.destination = module.params['dest']
         self.exclusion_patterns = module.params['exclusion_patterns'] or []
-        self.format = module.params['format']
+        self.format = module.params.get("format").get("compression")
         self.must_archive = module.params['force_archive']
         self.remove = module.params['remove']
         self.tmp_hlq = module.params['tmp_hlq']
@@ -632,7 +632,7 @@ class MVSArchive(Archive):
         """
         Create
         """
-        record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "xmit" else AMATERSE_RECORD_LENGTH
+        record_length = XMIT_RECORD_LENGTH if self.format == "xmit" else AMATERSE_RECORD_LENGTH
         # TODO shall we catch ensure_present error ? It raises a DataSetCreate Error. I think yes.
         changed = DataSet.ensure_present(name=name, replace=True, type='SEQ', record_format='FB', record_length=record_length)
         # cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
@@ -781,7 +781,15 @@ def run_module():
             exclude_path=dict(type='list', elements='str', default=[]),
             # Q1 I think we should use force in here instead of down, and change that one to replace.
             force_archive=dict(type='bool', default=False),
-            format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']),
+            format=dict(
+                type='dict',
+                required=False,
+                compression = dict(
+                    type='str',
+                    default='gz',
+                    choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
+                    )
+                ),
             group=dict(type='str', default=''),
             mode=dict(type='str', default=''),
             owner=dict(type='str', default=''),
@@ -801,7 +809,17 @@ def run_module():
         exclude_path=dict(type='list', elements='str', default=[]),
         # Q1 I think we should use force in here instead of down, and change that one to replace.
         force_archive=dict(type='bool', default=False),
-        format=dict(type='str', default='gz', choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']),
+        format=dict(
+            type='dict',
+            required=False,
+            options=dict(
+                    compression=dict(
+                    type='str',
+                    default='gz',
+                    choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
+                    )
+                )
+            ),
         group=dict(type='str', default=''),
         mode=dict(type='str', default=''),
         owner=dict(type='str', default=''),
