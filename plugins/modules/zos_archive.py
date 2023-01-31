@@ -625,25 +625,27 @@ class MVSArchive(Archive):
         cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
         temp_ds = temp_ds.replace('\n', '')
-        changed = DataSet.ensure_present(name=temp_ds, replace=False, type='SEQ', record_format='U')
+        changed = DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
         return temp_ds
 
-    def prepare_dump_ds(self, name):
+    def create_dest_ds(self, name):
         """
         Create
         """
         record_length = XMIT_RECORD_LENGTH if self.module.params.get("format") == "xmit" else AMATERSE_RECORD_LENGTH
-        cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
-        rc, out, err = self.module.run_command(cmd)
+        # TODO shall we catch ensure_present error ? It raises a DataSetCreate Error. I think yes.
+        changed = DataSet.ensure_present(name=name, replace=True, type='SEQ', record_format='FB', record_length=record_length)
+        # cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
+        # rc, out, err = self.module.run_command(cmd)
 
-        if rc != 0:
-            self.module.fail_json(
-                msg="Failed preparing {0} to be used as an archive".format(name),
-                stdout=out,
-                stderr=err,
-                stdout_lines=cmd,
-                rc=rc,
-            )
+        # if not changed:
+        #     self.module.fail_json(
+        #         msg="Failed preparing {0} to be used as an archive".format(name),
+        #         stdout=out,
+        #         stderr=err,
+        #         stdout_lines=cmd,
+        #         rc=rc,
+        #     )
         return name
 
     def dump_into_temp_ds(self, temp_ds):
@@ -729,7 +731,7 @@ class AMATerseArchive(MVSArchive):
         """
         temp_ds = self.prepare_temp_ds(self.module.params.get("tmp_hlq"))
         try:
-            terse_ds = self.prepare_dump_ds(self.destination)
+            terse_ds = self.create_dest_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
             rc = self._add(temp_ds, terse_ds)
         finally:
@@ -764,7 +766,7 @@ class XMITArchive(MVSArchive):
         """
         temp_ds = self.prepare_temp_ds(self.module.params.get("tmp_hlq"))
         try:
-            terse_ds = self.prepare_dump_ds(self.destination)
+            terse_ds = self.create_dest_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
             rc = self._add(temp_ds, terse_ds)
         finally:
