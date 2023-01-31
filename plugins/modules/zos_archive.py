@@ -625,10 +625,7 @@ class MVSArchive(Archive):
         cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
         temp_ds = temp_ds.replace('\n', '')
-        cmd = "dtouch -ru -tseq {0}".format(temp_ds)
-        rc, stdout, err = self.module.run_command(cmd)
-        # TODO replace False when we check for existing dest
-        # changed = DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
+        changed = DataSet.ensure_present(name=temp_ds, replace=False, type='SEQ', record_format='U')
         return temp_ds
 
     def prepare_dump_ds(self, name):
