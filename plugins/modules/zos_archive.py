@@ -731,9 +731,9 @@ class AMATerseArchive(MVSArchive):
         """
         temp_ds = self.prepare_temp_ds(self.module.params.get("tmp_hlq"))
         try:
-            terse_ds = self.create_dest_ds(self.destination)
+            destination = self.create_dest_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
-            rc = self._add(temp_ds, terse_ds)
+            rc = self._add(temp_ds, destination)
         finally:
             datasets.delete(temp_ds)
 
@@ -766,9 +766,9 @@ class XMITArchive(MVSArchive):
         """
         temp_ds = self.prepare_temp_ds(self.module.params.get("tmp_hlq"))
         try:
-            terse_ds = self.create_dest_ds(self.destination)
+            destination = self.create_dest_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
-            rc = self._add(temp_ds, terse_ds)
+            rc = self._add(temp_ds, destination)
         finally:
             datasets.delete(temp_ds)
 
