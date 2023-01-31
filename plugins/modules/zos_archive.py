@@ -704,7 +704,7 @@ class AMATerseArchive(MVSArchive):
     def __init__(self, module):
         super(AMATerseArchive, self).__init__(module)
         # TODO get the pack arg from params
-        self.pack_arg = "SPACK"
+        self.pack_arg = module.params.get("format").get("suboptions").get("terse_pack")
 
     def _add(self, path, archive):
         """
@@ -788,8 +788,19 @@ def run_module():
                     type='str',
                     default='gz',
                     choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
+                    ),
+                    suboptions=dict(
+                        type='dict',
+                        required=False,
+                        options=dict(
+                            terse_pack=dict(
+                                type='str',
+                                required=False,
+                                choices=['PACK', 'SPACK']
+                        ),
                     )
                 ),
+            ),
             group=dict(type='str', default=''),
             mode=dict(type='str', default=''),
             owner=dict(type='str', default=''),
@@ -817,6 +828,17 @@ def run_module():
                     type='str',
                     default='gz',
                     choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
+                    ),
+                    suboptions=dict(
+                        type='dict',
+                        required=False,
+                        options=dict(
+                            terse_pack=dict(
+                                type='str',
+                                required=False,
+                                choices=['PACK', 'SPACK']
+                            ),
+                        )
                     )
                 )
             ),
