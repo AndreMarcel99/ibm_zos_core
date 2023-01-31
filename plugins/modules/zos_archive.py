@@ -831,9 +831,7 @@ def run_module():
     except ValueError as err:
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
 
-    # Get the proper archive handler based on src and dest type.
     archive = get_archive(module)
-    # Find the targets
     archive.find_targets()
     if archive.has_targets():
         # if archive.must_archive:
@@ -850,9 +848,6 @@ def run_module():
     if archive.destination_exists():
         None
         # archive.update_permissions()
-    # if the user is working with this module in only check mode we do not
-    # want to make any changes to the environment, just return the current
-    # state with no modifications
     if module.check_mode:
         module.exit_json(**result)
     module.exit_json(**archive.result)
