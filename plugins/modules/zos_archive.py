@@ -621,13 +621,14 @@ class MVSArchive(Archive):
             hlq = tmphlq
         else:
             rc, hlq, err = self.module.run_command("hlq")
+            hlq = hlq.replace('\n', '')
         cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
-        # cmd = "dtouch -ru -tseq {0}".format(temp_ds)
-        # rc, stdout, err = self.module.run_command(cmd)
-        # temp_ds = temp_ds.replace('\n', '')
+        temp_ds = temp_ds.replace('\n', '')
+        cmd = "dtouch -ru -tseq {0}".format(temp_ds)
+        rc, stdout, err = self.module.run_command(cmd)
         # TODO replace False when we check for existing dest
-        changed = DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
+        # changed = DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
         return temp_ds
 
     def prepare_dump_ds(self, name):
@@ -729,7 +730,7 @@ class AMATerseArchive(MVSArchive):
         """
         Add MVS Datasets to the AMATERSE Archive by creating a temporary dataset and dumping the source datasets into it.
         """
-        temp_ds = self.prepare_temp_ds()
+        temp_ds = self.prepare_temp_ds(self.module.params.get("tmp_hlq"))
         try:
             terse_ds = self.prepare_dump_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
@@ -764,7 +765,7 @@ class XMITArchive(MVSArchive):
         """
         Adds MVS Datasets to the TSO XMIT Archive by creating a temporary dataset and dumping the source datasets into it.
         """
-        temp_ds = self.prepare_temp_ds()
+        temp_ds = self.prepare_temp_ds(self.module.params.get("tmp_hlq"))
         try:
             terse_ds = self.prepare_dump_ds(self.destination)
             rc = self.dump_into_temp_ds(temp_ds)
