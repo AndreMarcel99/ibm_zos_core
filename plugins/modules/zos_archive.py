@@ -245,7 +245,7 @@ def get_archive(module: AnsibleModule):
     TODO Come up with rules to decide based on src, dest and format
     which archive handler to use.
     """
-    format = module.params.get("format").get("compression")
+    format = module.params.get("format").get("name")
     if format in ["tar", "gz", "bz2"]:
         return TarArchive(module)
     elif format == "terse":
@@ -286,7 +286,7 @@ class Archive(abc.ABC):
         self.module = module
         self.destination = module.params['dest']
         self.exclusion_patterns = module.params['exclusion_patterns'] or []
-        self.format = module.params.get("format").get("compression")
+        self.format = module.params.get("format").get("name")
         self.must_archive = module.params['force_archive']
         self.remove = module.params['remove']
         self.tmp_hlq = module.params['tmp_hlq']
@@ -703,7 +703,6 @@ class MVSArchive(Archive):
 class AMATerseArchive(MVSArchive):
     def __init__(self, module):
         super(AMATerseArchive, self).__init__(module)
-        # TODO get the pack arg from params
         self.pack_arg = module.params.get("format").get("suboptions").get("terse_pack")
 
     def _add(self, path, archive):
@@ -784,7 +783,7 @@ def run_module():
             format=dict(
                 type='dict',
                 required=False,
-                compression = dict(
+                name = dict(
                     type='str',
                     default='gz',
                     choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
@@ -824,7 +823,7 @@ def run_module():
             type='dict',
             required=False,
             options=dict(
-                    compression=dict(
+                    name=dict(
                     type='str',
                     default='gz',
                     choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
