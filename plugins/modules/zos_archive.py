@@ -556,8 +556,17 @@ class TarArchive(Archive):
         return checksums
 
     def list_contents(self):
-        pass
-
+        if self.format == 'tar':
+            self.file = tarfile.open(_to_native_ascii(self.destination), 'r')
+        elif self.format in ('gz', 'bz2'):
+            self.file = tarfile.open(_to_native_ascii(self.destination), 'r|' + self.format)
+        elif self.format == 'xz':
+            self.fileIO = io.BytesIO()
+            self.file = tarfile.open(fileobj=self.fileIO, mode='r')
+        else:
+            self.module.fail_json(msg="%s is not a valid archive format for listing contents" % self.format)
+        self.successes = self.file.getnames()
+        self.file.close()
 
 class ZipArchive(Archive):
     def __init__(self, module):
@@ -876,7 +885,7 @@ def run_module():
     archive = get_archive(module)
     if archive.listing():
         archive.list_contents()
-        module.exit_json(**result)
+        module.exit_json(**archive.result)
  
     archive.find_targets()
     if archive.has_targets():
