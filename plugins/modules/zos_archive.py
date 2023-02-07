@@ -599,7 +599,10 @@ class ZipArchive(Archive):
         return checksums
 
     def list_contents(self):
-        pass
+        self.file = zipfile.ZipFile(self.destination, 'r', zipfile.ZIP_DEFLATED, True)
+        self.successes = self.file.namelist()
+        self.file.close()
+
 
 
 class MVSArchive(Archive):
