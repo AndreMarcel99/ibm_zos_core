@@ -297,6 +297,7 @@ class Archive(abc.ABC):
         self.successes = []
         self.targets = []
         self.not_found = []
+        self.list = module.params['list']
 
         paths = module.params['path']
 
@@ -461,7 +462,7 @@ class Archive(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def _list_targets(self):
+    def list_contents(self):
         pass
 
     @property
@@ -480,6 +481,8 @@ class Archive(abc.ABC):
             # 'targets': self.targets,
         }
 
+    def list(self):
+        return self.list
 
 class TarArchive(Archive):
     def __init__(self, module):
@@ -552,7 +555,7 @@ class TarArchive(Archive):
                 checksums = set()
         return checksums
 
-    def _list_targets(self):
+    def list_contents(self):
         pass
 
 
@@ -586,7 +589,7 @@ class ZipArchive(Archive):
             checksums = set()
         return checksums
 
-    def _list_targets(self):
+    def list_contents(self):
         pass
 
 
@@ -687,7 +690,7 @@ class MVSArchive(Archive):
                 self.module.fail_json(msg="Error creating MVS archive")
             self.successes.append(path)
 
-    def _list_targets(self):
+    def list_contents(self):
         pass
 
     def _get_checksums(self, path):
@@ -871,6 +874,10 @@ def run_module():
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
 
     archive = get_archive(module)
+    if archive.list():
+        archive.list_contents()
+        module.exit_json(**result)
+ 
     archive.find_targets()
     if archive.has_targets():
         # if archive.must_archive:
