@@ -481,7 +481,7 @@ class Archive(abc.ABC):
             # 'targets': self.targets,
         }
 
-    def list(self):
+    def listing(self):
         return self.list
 
 class TarArchive(Archive):
@@ -874,7 +874,7 @@ def run_module():
         module.fail_json(msg="Parameter verification failed", stderr=str(err))
 
     archive = get_archive(module)
-    if archive.list():
+    if archive.listing():
         archive.list_contents()
         module.exit_json(**result)
  
