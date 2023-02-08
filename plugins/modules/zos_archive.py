@@ -759,6 +759,7 @@ class AMATerseArchive(MVSArchive):
 class XMITArchive(MVSArchive):
     def __init__(self, module):
         super(XMITArchive, self).__init__(module)
+        self.xmit_log_dataset = module.params.get("format").get("suboptions").get("xmit_log_dataset")
 
     def _add(self, path, archive):
         """
@@ -767,7 +768,8 @@ class XMITArchive(MVSArchive):
             path: {str}
             archive: {str}
         """
-        tso_cmd = " tsocmd XMIT A.B DSN\\( \\'{0}\\' \\) OUTDSN\\( \\'{1}\\' \\) NOLOG".format( path, archive)
+        log_option = "LOGDSNAME\\({0}\\)".format(self.xmit_log_dataset) if self.xmit_log_dataset else "NOLOG"
+        tso_cmd = " tsocmd XMIT A.B DSN\\( \\'{0}\\' \\) OUTDSN\\( \\'{1}\\' \\) {2}".format( path, archive, log_option)
         rc, out, err = self.module.run_command(tso_cmd)
         if rc != 0:
             self.module.fail_json(
@@ -815,11 +817,17 @@ def run_module():
                             terse_pack=dict(
                                 type='str',
                                 required=False,
-                                choices=['PACK', 'SPACK']
+                                choices=['PACK', 'SPACK', ''],
+                            ),
+                            xmit_log_dataset=dict(
+                                type='str',
+                                required=False,
+                            ),
                         ),
-                    )
+                        default=dict(terse_pack="", xmit_log_dataset="")
+                    ),
+                default=dict(name="", supotions=dict(terse_pack="", xmit_log_dataset="")),
                 ),
-            ),
             group=dict(type='str', default=''),
             mode=dict(type='str', default=''),
             owner=dict(type='str', default=''),
@@ -830,7 +838,7 @@ def run_module():
             list=dict(type='bool', default=False),
             tmp_hlq=dict(type='str', default=''),
             force=dict(type='bool', default=False)
-        ),
+            ),
         supports_check_mode=True,
     )
 
@@ -856,11 +864,17 @@ def run_module():
                             terse_pack=dict(
                                 type='str',
                                 required=False,
-                                choices=['PACK', 'SPACK']
+                                choices=['PACK', 'SPACK', '']
                             ),
-                        )
+                            xmit_log_dataset=dict(
+                                type='str',
+                                required=False,
+                            ),
+                        ),
+                        default=dict(terse_pack="", xmit_log_dataset=""),
                     )
-                )
+                ),
+            default=dict(name="", supotions=dict(terse_pack="",xmit_log_dataset="")),
             ),
         group=dict(type='str', default=''),
         mode=dict(type='str', default=''),
