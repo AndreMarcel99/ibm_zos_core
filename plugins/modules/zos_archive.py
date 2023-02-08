@@ -767,7 +767,7 @@ class XMITArchive(MVSArchive):
             path: {str}
             archive: {str}
         """
-        tso_cmd = " tsocmd XMIT A.B DSN\\( \\'{0}\\' \\) OUTDSN\\( \\'{1}\\' \\)".format( path, archive)
+        tso_cmd = " tsocmd XMIT A.B DSN\\( \\'{0}\\' \\) OUTDSN\\( \\'{1}\\' \\) NOLOG".format( path, archive)
         rc, out, err = self.module.run_command(tso_cmd)
         if rc != 0:
             self.module.fail_json(
