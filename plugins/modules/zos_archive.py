@@ -298,6 +298,7 @@ class Archive(abc.ABC):
         self.targets = []
         self.not_found = []
         self.list = module.params['list']
+        self.force = module.params['force']
 
         paths = module.params['path']
 
@@ -504,17 +505,21 @@ class TarArchive(Archive):
         return True
 
     def open(self):
-        if self.format in ('gz', 'bz2'):
-            self.file = tarfile.open(_to_native_ascii(self.destination), 'w|' + self.format)
-        # python3 tarfile module allows xz format but for python2 we have to create the tarfile
-        # in memory and then compress it with lzma.
-        elif self.format == 'xz':
-            self.fileIO = io.BytesIO()
-            self.file = tarfile.open(fileobj=self.fileIO, mode='w')
-        elif self.format == 'tar':
-            self.file = tarfile.open(_to_native_ascii(self.destination), 'w')
-        else:
-            self.module.fail_json(msg="%s is not a valid archive format" % self.format)
+        open_mode = 'w' if self.force else 'x'
+        try:
+            if self.format in ('gz', 'bz2'):
+                self.file = tarfile.open(_to_native_ascii(self.destination), open_mode + ':' + self.format)
+            # python3 tarfile module allows xz format but for python2 we have to create the tarfile
+            # in memory and then compress it with lzma.
+            elif self.format == 'xz':
+                self.fileIO = io.BytesIO()
+                self.file = tarfile.open(fileobj=self.fileIO, mode=open_mode)
+            elif self.format == 'tar':
+                self.file = tarfile.open(_to_native_ascii(self.destination), open_mode)
+            else:
+                self.module.fail_json(msg="%s is not a valid archive format" % self.format)
+        except FileExistsError as e:
+            self.module.fail_json(msg="%s file exists. Use force flag to replace dest" % self.destination)
 
     def _add(self, path, archive):
         def py27_filter(tarinfo):
@@ -824,6 +829,7 @@ def run_module():
             replace_dest=dict(type='bool', default=False),
             list=dict(type='bool', default=False),
             tmp_hlq=dict(type='str', default=''),
+            force=dict(type='bool', default=False)
         ),
         supports_check_mode=True,
     )
@@ -865,6 +871,7 @@ def run_module():
         replace_dest=dict(type='bool', default=False, alias='force'),
         list=dict(type='bool', default=False),
         tmp_hlq=dict(type='qualifier_or_empty', default=''),
+        force=dict(type='bool', default=False)
     )
     # seed the result dict in the object
     # we primarily care about changed and state
