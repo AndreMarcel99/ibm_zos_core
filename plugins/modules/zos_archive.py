@@ -440,6 +440,13 @@ class Archive(abc.ABC):
     def has_unfound_targets(self):
         return bool(self.not_found)
 
+    def update_permissions(self):
+        file_args = self.module.load_file_common_arguments(self.module.params, path=self.destination)
+        self.changed = self.module.set_fs_attributes_if_different(file_args, self.changed)
+
+    def listing(self):
+        return self.list
+
     @abc.abstractmethod
     def close(self):
         pass
@@ -480,9 +487,6 @@ class Archive(abc.ABC):
             # 'targets': self.targets,
         }
 
-    def listing(self):
-        return self.list
-
 class TarArchive(Archive):
     def __init__(self, module):
         super(TarArchive, self).__init__(module)
@@ -504,6 +508,7 @@ class TarArchive(Archive):
 
     def open(self):
         open_mode = 'w' if self.force else 'x'
+
         try:
             if self.format in ('gz', 'bz2'):
                 self.file = tarfile.open(_to_native_ascii(self.destination), open_mode + ':' + self.format)
