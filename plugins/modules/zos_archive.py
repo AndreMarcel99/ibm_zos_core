@@ -184,7 +184,6 @@ import zipfile
 import tarfile
 from traceback import format_exc
 from zlib import crc32
-from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.data_set import DataSet
 from fnmatch import fnmatch
 from ansible_collections.ibm.ibm_zos_core.plugins.module_utils.import_handler import (
     MissingZOAUImport,
@@ -626,7 +625,7 @@ class MVSArchive(Archive):
         Based on path, find existing targets.
         """
         for path in self.paths:
-            if DataSet.data_set_exists(path):
+            if data_set.DataSet.data_set_exists(path):
                 self.targets.append(path)
             else:
                 self.not_found.append(path)
@@ -645,7 +644,7 @@ class MVSArchive(Archive):
         cmd = "mvstmphelper {0}.DZIP".format(hlq)
         rc, temp_ds, err = self.module.run_command(cmd)
         temp_ds = temp_ds.replace('\n', '')
-        changed = DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
+        changed = data_set.DataSet.ensure_present(name=temp_ds, replace=True, type='SEQ', record_format='U')
         return temp_ds
 
     def create_dest_ds(self, name):
@@ -654,7 +653,7 @@ class MVSArchive(Archive):
         """
         record_length = XMIT_RECORD_LENGTH if self.format == "xmit" else AMATERSE_RECORD_LENGTH
         # TODO shall we catch ensure_present error ? It raises a DataSetCreate Error. I think yes.
-        changed = DataSet.ensure_present(name=name, replace=True, type='SEQ', record_format='FB', record_length=record_length)
+        changed = data_set.DataSet.ensure_present(name=name, replace=True, type='SEQ', record_format='FB', record_length=record_length)
         # cmd = "dtouch -rfb -tseq -l{0} {1}".format(record_length, name)
         # rc, out, err = self.module.run_command(cmd)
 
@@ -718,6 +717,9 @@ class MVSArchive(Archive):
 
     def is_different_from_original(self):
         return True
+
+    def destination_exists(self):
+        return data_set.DataSet.data_set_exists(self.destination)
 
 
 class AMATerseArchive(MVSArchive):
@@ -874,7 +876,7 @@ def run_module():
                         default=dict(terse_pack="", xmit_log_dataset=""),
                     )
                 ),
-            default=dict(name="", supotions=dict(terse_pack="",xmit_log_dataset="")),
+            default=dict(name="", supotions=dict(terse_pack="", xmit_log_dataset="")),
             ),
         group=dict(type='str', default=''),
         mode=dict(type='str', default=''),
@@ -911,6 +913,9 @@ def run_module():
         archive.list_contents()
         module.exit_json(**archive.result)
  
+    if archive.destination_exists() and not archive.force:
+        module.fail_json(msg="%s file exists. Use force flag to replace dest" % archive.destination)
+
     archive.find_targets()
     if archive.has_targets():
         # if archive.must_archive:
