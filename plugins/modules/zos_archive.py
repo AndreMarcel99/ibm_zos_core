@@ -319,12 +319,11 @@ class Archive(abc.ABC):
                     # expanded_exclude_paths=_to_native(b', '.join(self.expanded_exclude_paths)),
                     msg='Error, no source paths were found'
                 )
-
+            self.original_checksums = self.destination_checksums()
+            self.original_size = self.destination_size()
             self.root = common_path(self.paths)
         self.tmp_debug = ""
 
-        self.original_checksums = self.destination_checksums()
-        self.original_size = self.destination_size()
 
     def add(self, path, archive):
         """
