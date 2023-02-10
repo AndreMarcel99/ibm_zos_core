@@ -612,7 +612,6 @@ class ZipArchive(Archive):
         self.file.close()
 
 
-
 class MVSArchive(Archive):
     def __init__(self, module):
         super(MVSArchive, self).__init__(module)
@@ -682,7 +681,8 @@ class MVSArchive(Archive):
             dump_cmd += "\n {0}, - ".format(target)
         dump_cmd += '\n ) '
 
-        # dump_cmd += '- \n ) TOL( ENQF IOER ) '
+        if self.force:
+            dump_cmd += '- \n ) TOL( ENQF IOER ) '
 
         dump_cmd += ' )'
 
