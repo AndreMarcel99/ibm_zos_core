@@ -440,6 +440,9 @@ class Archive(abc.ABC):
     def has_unfound_targets(self):
         return bool(self.not_found)
 
+    def destination_type(self):
+        return "USS"
+
     def update_permissions(self):
         file_args = self.module.load_file_common_arguments(self.module.params, path=self.destination)
         self.changed = self.module.set_fs_attributes_if_different(file_args, self.changed)
@@ -722,6 +725,9 @@ class MVSArchive(Archive):
     def is_different_from_original(self):
         return True
 
+    def destination_type(self):
+        return "MVS"
+
     def destination_exists(self):
         return data_set.DataSet.data_set_exists(self.destination)
 
@@ -930,12 +936,10 @@ def run_module():
             archive.remove_targets()
     else:
         if archive.destination_exists():
-            # If destination exists then we verify is an archive.
             archive.destination_state = STATE_ARCHIVED if archive.is_archive(archive.destination) else STATE_COMPRESSED
 
-    if archive.destination_exists():
-        None
-        # archive.update_permissions()
+    if archive.destination_exists() and archive.destination_type() == "USS":
+        archive.update_permissions()
     if module.check_mode:
         module.exit_json(**result)
     module.exit_json(**archive.result)
