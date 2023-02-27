@@ -41,7 +41,7 @@ options:
     description:
       - The type of compression to use.
     type: str
-    choices: [ bz2, gz, tar, zip, terse]
+    choices: [ bz2, gz, tar, zip, terse, xmit, pax]
     default: gz
     required: false
   dest:
@@ -820,7 +820,7 @@ def run_module():
                 name = dict(
                     type='str',
                     default='gz',
-                    choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
+                    choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit', 'pax']
                     ),
                     suboptions=dict(
                         type='dict',
@@ -867,7 +867,7 @@ def run_module():
                     name=dict(
                     type='str',
                     default='gz',
-                    choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit']
+                    choices=['bz2', 'gz', 'tar', 'zip', 'terse', 'xmit', 'pax']
                     ),
                     suboptions=dict(
                         type='dict',
