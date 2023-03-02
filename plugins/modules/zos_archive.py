@@ -226,7 +226,7 @@ def _to_native_ascii(s):
     return to_native(s, errors='surrogate_or_strict', encoding='ascii')
 
 
-def matches_exclusion_patterns(path: str, exclusion_patterns: str):
+def matches_exclusion_patterns(path, exclusion_patterns):
     return any(fnmatch(path, p) for p in exclusion_patterns)
 
 
