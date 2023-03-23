@@ -1882,10 +1882,10 @@ def test_copy_pds_loadlib_member_to_pds_loadlib_member(ansible_zos_module,):
         # both src and dest need to be a loadlib
         rc = link_loadlib_from_cobol(hosts, dest_name, cobol_pds)
         print("return code: {0}".format(rc))
-        # assert rc == 0
+        assert rc == 0
         rc = link_loadlib_from_cobol(hosts, src_name, cobol_pds)
         print("return code: {0}".format(rc))
-        # assert rc == 0
+        assert rc == 0
 
         print("Dataset names {0}({1})".format(src, member))
         print("Dataset names {0}({1})".format(dest, "MEM1"))
